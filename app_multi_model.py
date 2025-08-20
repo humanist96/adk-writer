@@ -473,6 +473,14 @@ class MultiModelFinancialWritingApp:
                 loop_config['provider'] = provider
                 loop_config['model'] = model
                 
+                # Also set provider-specific model keys
+                if provider == "Anthropic":
+                    loop_config['anthropic_model'] = model
+                elif provider == "OpenAI":
+                    loop_config['openai_model'] = model
+                elif provider == "Google":
+                    loop_config['google_model'] = model
+                
                 # Create and run LoopAgent
                 from src.agents.loop_agent import LoopAgent
                 loop_agent = LoopAgent(loop_config)

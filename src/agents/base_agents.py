@@ -47,7 +47,14 @@ class BaseLlmAgent:
             # Use multi-model agent for Anthropic/OpenAI
             self.multi_model_agent = MultiModelAgent(self.model_config)
             self.model = None
-            logger.info(f"Initialized {self.name} with multi-model support ({provider})")
+            # Log the actual model being used
+            if provider == "Anthropic":
+                model_used = self.model_config.get("anthropic_model", "claude-3-5-sonnet-20241022")
+            elif provider == "OpenAI":
+                model_used = self.model_config.get("openai_model", "gpt-4-turbo")
+            else:
+                model_used = self.model_config.get("google_model", "gemini-1.5-flash")
+            logger.info(f"Initialized {self.name} with multi-model support ({provider}: {model_used})")
         else:
             # Use Google Gemini by default
             genai.configure(api_key=self.model_config.get("api_key"))
