@@ -35,6 +35,14 @@ from src.tools.custom_tools import (
     check_compliance,
     calculate_quality_score
 )
+from src.utils.diff_utils import (
+    create_diff_html,
+    create_word_diff,
+    extract_modifications,
+    create_modification_summary,
+    get_change_statistics,
+    calculate_similarity
+)
 
 # Custom CSS for modern UI
 st.markdown("""
@@ -268,6 +276,8 @@ class MultiModelFinancialWritingApp:
             st.session_state.draft_document = None
         if 'refinement_history' not in st.session_state:
             st.session_state.refinement_history = []
+        if 'critique_history' not in st.session_state:
+            st.session_state.critique_history = []
     
     def render_header(self):
         """Render animated header"""
@@ -514,16 +524,31 @@ class MultiModelFinancialWritingApp:
                         'model': f"{provider} - {model}"
                     }]
                     
+                    # Save critique history for diff analysis
+                    st.session_state.critique_history = []
+                    
                     # Add refinement history from loop iterations
-                    for i, hist in enumerate(loop_result['history'][1:], 1):
-                        refined_content = hist.get('result', {}).get('refined_content', '')
+                    for i, hist in enumerate(loop_result['history'], 1):
+                        result = hist.get('result', {})
+                        refined_content = result.get('refined_content', '')
+                        critique = result.get('critique', '')
+                        
                         if refined_content:
                             st.session_state.refinement_history.append({
                                 'version': f'개선 {i}',
                                 'content': refined_content,
                                 'timestamp': hist.get('timestamp', datetime.now().isoformat()),
                                 'model': f"{provider} - {model}",
-                                'quality_score': hist.get('result', {}).get('quality_score', 0)
+                                'quality_score': result.get('quality_score', 0)
+                            })
+                        
+                        if critique:
+                            st.session_state.critique_history.append({
+                                'iteration': i,
+                                'critique': critique,
+                                'quality_score': result.get('quality_score', 0),
+                                'issues': result.get('issues_found', []),
+                                'suggestions': result.get('suggestions', [])
                             })
                 
                 # Update status
@@ -749,9 +774,10 @@ class MultiModelFinancialWritingApp:
         st.markdown("---")
         
         # Tabs for different features
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
             "✍️ 문서 작성",
             "🔄 초안 vs 최종",
+            "🔀 변경 사항 분석",
             "🔍 모델 비교",
             "📊 분석",
             "📚 이력"
@@ -997,6 +1023,192 @@ class MultiModelFinancialWritingApp:
                 st.info("먼저 문서를 생성해주세요. 문서 작성 탭에서 요구사항을 입력하고 생성 버튼을 클릭하세요.")
         
         with tab3:
+            st.markdown("### 🔀 변경 사항 상세 분석")
+            
+            if st.session_state.draft_document and st.session_state.current_result:
+                # View mode selector
+                view_mode = st.radio(
+                    "분석 모드",
+                    ["변경 사항 요약", "라인별 비교", "단어별 비교", "수정 이유 분석"],
+                    horizontal=True
+                )
+                
+                draft_doc = st.session_state.draft_document
+                final_doc = st.session_state.current_result.get('final_document', '')
+                
+                if view_mode == "변경 사항 요약":
+                    # Statistics
+                    stats = get_change_statistics(draft_doc, final_doc)
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric(
+                            "문서 유사도",
+                            f"{stats['similarity']:.1f}%",
+                            help="초안과 최종본의 텍스트 유사도"
+                        )
+                    with col2:
+                        st.metric(
+                            "길이 변화",
+                            f"{stats['length_change']:+,}자",
+                            f"{stats['length_change_percent']:+.1f}%"
+                        )
+                    with col3:
+                        st.metric(
+                            "단어 수 변화",
+                            f"{stats['word_change']:+,}개",
+                            help="총 단어 수의 변화"
+                        )
+                    with col4:
+                        st.metric(
+                            "문장 수 변화",
+                            f"{stats['sentences_final'] - stats['sentences_original']:+,}개",
+                            help="문장 개수의 변화"
+                        )
+                    
+                    # Modification summary from critique history
+                    if st.session_state.critique_history:
+                        st.markdown("#### 📝 주요 수정 사항")
+                        
+                        all_modifications = []
+                        for critique_item in st.session_state.critique_history:
+                            critique_text = critique_item.get('critique', '')
+                            if critique_text:
+                                mods = extract_modifications(critique_text)
+                                all_modifications.extend(mods)
+                        
+                        if all_modifications:
+                            summary_html = create_modification_summary(all_modifications)
+                            st.markdown(summary_html, unsafe_allow_html=True)
+                        else:
+                            st.info("수정 사항을 자동으로 추출할 수 없습니다.")
+                    
+                    # Quality improvement timeline
+                    if st.session_state.critique_history:
+                        st.markdown("#### 📈 품질 개선 추이")
+                        
+                        iterations = []
+                        scores = []
+                        for critique_item in st.session_state.critique_history:
+                            iterations.append(f"반복 {critique_item['iteration']}")
+                            scores.append(critique_item.get('quality_score', 0) * 100)
+                        
+                        # Simple chart using columns
+                        chart_cols = st.columns(len(iterations))
+                        for i, (iter_name, score) in enumerate(zip(iterations, scores)):
+                            with chart_cols[i]:
+                                st.metric(iter_name, f"{score:.0f}%")
+                
+                elif view_mode == "라인별 비교":
+                    st.markdown("#### 📄 라인별 차이점")
+                    
+                    # Create line diff
+                    diff_html = create_diff_html(draft_doc, final_doc, "초안", "최종")
+                    st.markdown(diff_html, unsafe_allow_html=True)
+                    
+                    # Download diff as text
+                    diff_text = f"=== 초안 ===\n{draft_doc}\n\n=== 최종 ===\n{final_doc}"
+                    st.download_button(
+                        "📥 비교 결과 다운로드",
+                        diff_text,
+                        file_name=f"diff_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                        mime="text/plain"
+                    )
+                
+                elif view_mode == "단어별 비교":
+                    st.markdown("#### 📝 단어 수준 변경사항")
+                    
+                    word_diff_html, word_stats = create_word_diff(draft_doc, final_doc)
+                    
+                    # Show statistics
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("추가된 단어", word_stats['added'])
+                    with col2:
+                        st.metric("삭제된 단어", word_stats['removed'])
+                    with col3:
+                        st.metric("총 변경", word_stats['total_changes'])
+                    
+                    # Show word diff
+                    st.markdown(
+                        f'<div style="background: white; padding: 1rem; border-radius: 8px; line-height: 1.8;">{word_diff_html}</div>',
+                        unsafe_allow_html=True
+                    )
+                
+                elif view_mode == "수정 이유 분석":
+                    st.markdown("#### 🔍 수정 이유 및 근거")
+                    
+                    if st.session_state.critique_history:
+                        for i, critique_item in enumerate(st.session_state.critique_history, 1):
+                            with st.expander(f"반복 {i} - 품질 점수: {critique_item.get('quality_score', 0):.1%}"):
+                                critique_text = critique_item.get('critique', '')
+                                
+                                # Display issues
+                                issues = critique_item.get('issues', [])
+                                if issues:
+                                    st.markdown("**발견된 문제점:**")
+                                    for issue in issues:
+                                        st.markdown(f"- ⚠️ {issue}")
+                                
+                                # Display suggestions
+                                suggestions = critique_item.get('suggestions', [])
+                                if suggestions:
+                                    st.markdown("**개선 제안:**")
+                                    for suggestion in suggestions:
+                                        st.markdown(f"- 💡 {suggestion}")
+                                
+                                # Display full critique
+                                if critique_text:
+                                    st.markdown("**상세 비평:**")
+                                    st.text_area(
+                                        "비평 내용",
+                                        value=critique_text,
+                                        height=200,
+                                        label_visibility="collapsed",
+                                        key=f"critique_{i}"
+                                    )
+                    else:
+                        st.info("LoopAgent를 사용하여 문서를 생성하면 상세한 수정 이유를 확인할 수 있습니다.")
+                
+                # Export options
+                st.markdown("---")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("📊 분석 보고서 생성", use_container_width=True):
+                        # Generate comprehensive report
+                        report = f"""# 문서 개선 분석 보고서
+생성일: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## 1. 개요
+- 초안 길이: {len(draft_doc):,}자
+- 최종 길이: {len(final_doc):,}자
+- 변경률: {((len(final_doc) - len(draft_doc)) / len(draft_doc) * 100):.1f}%
+- 문서 유사도: {calculate_similarity(draft_doc, final_doc) * 100:.1f}%
+
+## 2. 초안
+{draft_doc}
+
+## 3. 최종본
+{final_doc}
+
+## 4. 주요 변경 사항
+{' '.join([f"- {mod['description']}" for critique in st.session_state.critique_history for mod in extract_modifications(critique.get('critique', ''))][:5])}
+"""
+                        st.download_button(
+                            "📥 보고서 다운로드",
+                            report,
+                            file_name=f"analysis_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                            mime="text/markdown"
+                        )
+                
+                with col2:
+                    if st.button("🔄 재분석", use_container_width=True):
+                        st.rerun()
+            
+            else:
+                st.info("문서를 생성한 후 변경 사항 분석을 확인할 수 있습니다.")
+        
+        with tab4:
             st.markdown("### 🔍 여러 모델 비교")
             st.info("동일한 요구사항으로 여러 AI 모델의 결과를 비교해보세요.")
             
