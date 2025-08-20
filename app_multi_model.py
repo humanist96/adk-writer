@@ -45,6 +45,7 @@ from src.utils.diff_utils import (
     calculate_similarity
 )
 from src.database import get_db_manager
+from src.utils.example_templates import ExampleTemplates
 
 # Custom CSS for modern UI
 st.markdown("""
