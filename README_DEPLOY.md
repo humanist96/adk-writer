@@ -26,12 +26,12 @@ location = "us-central1"
 # Anthropic Configuration
 [anthropic]
 api_key = "your_anthropic_api_key_here"
-model = "claude-3-opus-20240229"
+model = "claude-3-5-sonnet-20241022"
 
 # OpenAI Configuration
 [openai]
 api_key = "your_openai_api_key_here"
-model = "gpt-4-turbo-preview"
+model = "gpt-4-turbo"
 
 # Model Settings
 [model]
