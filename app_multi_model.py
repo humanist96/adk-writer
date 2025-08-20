@@ -680,6 +680,9 @@ class MultiModelFinancialWritingApp:
             prompt += "\n- 추가 컨텍스트의 내용을 반드시 반영하세요"
             prompt += "\n- 특별히 강조된 사항은 문서에서 부각시켜 주세요"
         
+        # Add length preference
+        length_pref = input_data.get('length_preference', 'medium')
+        
         prompt += """
 
 [작성 기준]
@@ -691,6 +694,17 @@ class MultiModelFinancialWritingApp:
 6. 적절한 구조와 형식 준수
 7. 전문적이면서도 이해하기 쉬운 표현
 8. 코스콤 금융영업부의 전문성과 신뢰성 반영
+"""
+        
+        # Add length-specific instructions
+        if length_pref == "short":
+            prompt += "\n[문서 길이] ⚡ 간결하고 핵심적인 내용으로 1-2단락 이내로 작성"
+        elif length_pref == "long":
+            prompt += "\n[문서 길이] 📚 상세하고 종합적인 내용으로 5-7단락 이상 작성"
+        else:
+            prompt += "\n[문서 길이] 📄 적절한 길이로 3-4단락 정도로 작성"
+        
+        prompt += """
 
 발신: 코스콤 금융영업부
 
@@ -773,16 +787,73 @@ class MultiModelFinancialWritingApp:
             
             tone = st.select_slider(
                 "톤앤매너",
-                options=["formal", "professional", "professional_friendly", "friendly"],
-                value="professional",
+                options=["formal", "professional", "professional_premium", "analytical", "urgent", "friendly"],
+                value=st.session_state.get('example_tone', 'professional'),
                 format_func=lambda x: {
                     "formal": "격식있는",
                     "professional": "전문적인",
-                    "professional_friendly": "전문적이면서 친근한",
+                    "professional_premium": "프리미엄 (VIP용)",
+                    "analytical": "분석적인",
+                    "urgent": "긴급한",
                     "friendly": "친근한"
                 }.get(x, x),
                 help="문서의 톤을 선택하세요"
             )
+            
+            # Document length preference
+            doc_length = st.select_slider(
+                "📏 문서 길이",
+                options=["short", "medium", "long"],
+                value="medium",
+                format_func=lambda x: {
+                    "short": "간결 (1-2단락)",
+                    "medium": "보통 (3-4단락)",
+                    "long": "상세 (5-7단락+)"
+                }.get(x, x),
+                help="생성할 문서의 길이를 선택하세요"
+            )
+            
+            # Advanced prompt settings
+            with st.expander("🧪 고급 프롬프트 설정", expanded=False):
+                use_context7 = st.checkbox(
+                    "📚 Context7 패턴 사용",
+                    value=True,
+                    help="Context7 문서 구조 패턴과 금융 전문 용어를 적용합니다"
+                )
+                
+                use_sequential = st.checkbox(
+                    "🔄 Sequential Thinking 사용",
+                    value=True,
+                    help="체계적인 순차 사고 프레임워크를 적용합니다"
+                )
+                
+                if st.button("🎯 고급 프롬프트 적용", use_container_width=True):
+                    if requirements:
+                        # Create enhanced prompt with Context7 and Sequential
+                        from src.utils.example_templates import ExampleTemplates
+                        et = ExampleTemplates()
+                        
+                        # Build a temporary example from current inputs
+                        temp_example = {
+                            'title': doc_type,
+                            'requirements': requirements,
+                            'recipient': recipient,
+                            'subject': subject,
+                            'additional_context': additional_context,
+                            'tone': tone,
+                            'length': doc_length
+                        }
+                        
+                        enhanced_prompt = et.generate_advanced_prompt(
+                            temp_example,
+                            use_context7=use_context7,
+                            use_sequential=use_sequential,
+                            length_preference=doc_length
+                        )
+                        
+                        st.session_state.example_requirements = enhanced_prompt
+                        st.success("✨ 고급 프롬프트가 적용되었습니다!")
+                        st.rerun()
             
             st.markdown("---")
             
@@ -828,21 +899,50 @@ class MultiModelFinancialWritingApp:
             with col1:
                 st.markdown("### 📝 문서 요구사항")
                 
+                # Use example values if available
+                req_value = st.session_state.get('example_requirements', '')
                 requirements = st.text_area(
                     "요구사항",
+                    value=req_value,
                     placeholder="작성하고자 하는 문서의 내용과 요구사항을 입력하세요...\n\n예시:\n- 신규 금융 상품 안내 이메일\n- 투자 제안서 초안\n- 규정 준수 보고서",
                     height=250,
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    key="requirements_input"
                 )
                 
-                with st.expander("📎 추가 정보", expanded=False):
-                    recipient = st.text_input("수신자", placeholder="예: 김철수 대표님")
-                    subject = st.text_input("제목", placeholder="예: 2024년 신규 투자 상품 안내")
+                # Check if we have example data
+                has_example = any([
+                    'example_recipient' in st.session_state,
+                    'example_subject' in st.session_state,
+                    'example_context' in st.session_state
+                ])
+                
+                with st.expander("📎 추가 정보", expanded=has_example):
+                    recipient = st.text_input(
+                        "수신자",
+                        value=st.session_state.get('example_recipient', ''),
+                        placeholder="예: 김철수 대표님",
+                        key="recipient_input"
+                    )
+                    subject = st.text_input(
+                        "제목",
+                        value=st.session_state.get('example_subject', ''),
+                        placeholder="예: 2024년 신규 투자 상품 안내",
+                        key="subject_input"
+                    )
                     additional_context = st.text_area(
                         "추가 컨텍스트",
+                        value=st.session_state.get('example_context', ''),
                         placeholder="특별히 강조하거나 포함해야 할 내용을 입력하세요...",
-                        height=100
+                        height=100,
+                        key="context_input"
                     )
+                
+                # Clean up example data after use
+                if req_value and requirements != req_value:
+                    for key in ['example_requirements', 'example_recipient', 'example_subject', 'example_context', 'example_tone']:
+                        if key in st.session_state:
+                            del st.session_state[key]
                 
                 # LoopAgent 사용 옵션
                 use_loop = st.checkbox(
@@ -866,7 +966,8 @@ class MultiModelFinancialWritingApp:
                                     "subject": subject,
                                     "additional_context": additional_context,
                                     "temperature": temperature,
-                                    "max_tokens": max_tokens
+                                    "max_tokens": max_tokens,
+                                    "length_preference": doc_length
                                 }
                                 
                                 result = self.process_document(input_data, use_loop_agent=use_loop)
@@ -896,9 +997,92 @@ class MultiModelFinancialWritingApp:
                             st.warning("요구사항을 입력해주세요.")
                 
                 with col1_2:
-                    if st.button("🎲 예시 입력", use_container_width=True):
-                        st.session_state.example_text = "고액 자산가를 위한 프리미엄 자산관리 서비스 안내 이메일을 작성해주세요. VIP 고객 대상으로 전문적이면서도 품격있는 톤으로 작성하고, 맞춤형 포트폴리오 관리와 세무 자문 서비스를 강조해주세요."
-                        st.rerun()
+                    if st.button("🎲 예시 선택", use_container_width=True, key="example_selector_btn"):
+                        st.session_state.show_example_selector = not st.session_state.get('show_example_selector', False)
+                
+                # Example selector dialog
+                if st.session_state.get('show_example_selector', False):
+                    with st.container():
+                        st.markdown("### 📚 코스콤 금융영업부 최적화 예시")
+                        
+                        # Document type filter
+                        example_category = st.selectbox(
+                            "문서 유형 선택",
+                            ["전체"] + [
+                                "email (이메일)",
+                                "proposal (제안서)",
+                                "report (보고서)",
+                                "official (공식문서)"
+                            ],
+                            key="example_category_select"
+                        )
+                        
+                        # Get examples based on category
+                        if example_category == "전체":
+                            examples = []
+                            for cat in ['email', 'proposal', 'report', 'official']:
+                                examples.extend(self.example_templates.get_examples_by_category(cat))
+                        else:
+                            cat_key = example_category.split(' ')[0]
+                            examples = self.example_templates.get_examples_by_category(cat_key)
+                        
+                        # Display examples in a grid
+                        if examples:
+                            for idx, example in enumerate(examples):
+                                with st.expander(f"{example['title']} - {example['category']}", expanded=False):
+                                    st.write(example.get('requirements', '')[:200] + "...")
+                                    
+                                    # Advanced options
+                                    col_opt1, col_opt2, col_opt3 = st.columns(3)
+                                    with col_opt1:
+                                        use_c7 = st.checkbox(
+                                            "Context7 패턴",
+                                            value=True,
+                                            key=f"c7_{idx}",
+                                            help="Context7 문서 구조 패턴 적용"
+                                        )
+                                    with col_opt2:
+                                        use_seq = st.checkbox(
+                                            "Sequential",
+                                            value=True,
+                                            key=f"seq_{idx}",
+                                            help="Sequential Thinking 적용"
+                                        )
+                                    with col_opt3:
+                                        length_pref = st.select_slider(
+                                            "길이",
+                                            options=["short", "medium", "long"],
+                                            value=example.get('length', 'medium'),
+                                            key=f"length_{idx}"
+                                        )
+                                    
+                                    if st.button(
+                                        "✅ 이 예시 사용",
+                                        key=f"use_example_{idx}",
+                                        use_container_width=True,
+                                        type="primary"
+                                    ):
+                                        # Generate advanced prompt
+                                        advanced_prompt = self.example_templates.generate_advanced_prompt(
+                                            example,
+                                            use_context7=use_c7,
+                                            use_sequential=use_seq,
+                                            length_preference=length_pref
+                                        )
+                                        
+                                        # Set the values
+                                        st.session_state.example_requirements = advanced_prompt
+                                        st.session_state.example_recipient = example.get('recipient', '')
+                                        st.session_state.example_subject = example.get('subject', '')
+                                        st.session_state.example_context = example.get('additional_context', '')
+                                        st.session_state.example_tone = example.get('tone', 'professional')
+                                        st.session_state.show_example_selector = False
+                                        st.rerun()
+                        
+                        # Close button
+                        if st.button("❌ 닫기", use_container_width=True):
+                            st.session_state.show_example_selector = False
+                            st.rerun()
             
             with col2:
                 st.markdown("### 📄 생성된 문서")
