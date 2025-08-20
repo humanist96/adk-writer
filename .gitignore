@@ -82,6 +82,7 @@ logs/
 *.sqlite
 *.sqlite3
 financial_writer.db
+adk_writer.db
 
 # Temporary files
 *.tmp

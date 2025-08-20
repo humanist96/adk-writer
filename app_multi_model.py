@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 import time
+from loguru import logger
 
 # Page configuration
 st.set_page_config(
@@ -43,6 +44,7 @@ from src.utils.diff_utils import (
     get_change_statistics,
     calculate_similarity
 )
+from src.database import get_db_manager
 
 # Custom CSS for modern UI
 st.markdown("""
@@ -252,7 +254,9 @@ class MultiModelFinancialWritingApp:
     def __init__(self):
         self.config = config
         self.multi_model_agent = None
+        self.db = get_db_manager()  # Initialize database manager
         self._initialize_session_state()
+        self._load_statistics_from_db()
     
     def _initialize_session_state(self):
         """Initialize session state variables"""
@@ -278,6 +282,22 @@ class MultiModelFinancialWritingApp:
             st.session_state.refinement_history = []
         if 'critique_history' not in st.session_state:
             st.session_state.critique_history = []
+    
+    def _load_statistics_from_db(self):
+        """Load statistics from database"""
+        try:
+            db_stats = self.db.get_statistics(days=30)
+            st.session_state.stats = {
+                'total_documents': db_stats['total_documents'],
+                'avg_quality': db_stats['avg_quality'],
+                'avg_iterations': db_stats['avg_iterations'],
+                'total_time': db_stats['total_time'],
+                'models_used': db_stats.get('by_provider', {}),
+                'daily_stats': db_stats.get('daily_stats', []),
+                'by_document_type': db_stats.get('by_document_type', {})
+            }
+        except Exception as e:
+            logger.warning(f"Could not load statistics from database: {str(e)}")
     
     def render_header(self):
         """Render animated header"""
@@ -681,6 +701,7 @@ class MultiModelFinancialWritingApp:
     
     def _update_stats(self, result: Dict[str, Any]):
         """Update statistics"""
+        # Update session state stats
         stats = st.session_state.stats
         stats['total_documents'] += 1
         
@@ -697,6 +718,8 @@ class MultiModelFinancialWritingApp:
         )
         
         stats['total_time'] += result.get('total_time', 0)
+        
+        # Stats are also automatically updated in database when saving document
     
     def run(self):
         """Run the application"""
@@ -849,11 +872,20 @@ class MultiModelFinancialWritingApp:
                                 result = self.process_document(input_data, use_loop_agent=use_loop)
                                 
                                 st.session_state.current_result = result
-                                st.session_state.history.append({
+                                # Save to database
+                                doc_data = {
                                     "timestamp": datetime.now().isoformat(),
                                     "input": input_data,
                                     "result": result
-                                })
+                                }
+                                
+                                try:
+                                    doc_id = self.db.save_document(doc_data)
+                                    result['document_id'] = doc_id
+                                except Exception as e:
+                                    logger.error(f"Error saving to database: {str(e)}")
+                                
+                                st.session_state.history.append(doc_data)
                                 
                                 if result.get("success"):
                                     st.success(f"✅ 문서 생성 완료! (모델: {result.get('model_used', 'Unknown')})")
@@ -1326,10 +1358,90 @@ class MultiModelFinancialWritingApp:
                         st.warning("비교할 모델을 선택해주세요.")
         
         with tab4:
+            st.markdown("### 📊 통계 및 분석")
+            
+            # Statistics period selector
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                stat_period = st.selectbox(
+                    "통계 기간",
+                    ["오늘", "지난 7일", "지난 30일", "전체"],
+                    index=2
+                )
+            with col2:
+                if st.button("🔄 새로고침", use_container_width=True):
+                    self._load_statistics_from_db()
+                    st.rerun()
+            
+            # Calculate period days
+            if stat_period == "오늘":
+                days = 1
+            elif stat_period == "지난 7일":
+                days = 7
+            elif stat_period == "지난 30일":
+                days = 30
+            else:
+                days = 365
+            
+            # Load statistics from database
+            try:
+                db_stats = self.db.get_statistics(days=days)
+            except:
+                db_stats = st.session_state.stats
+            
+            # Overall statistics
+            st.markdown("#### 🎯 전체 통계")
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric(
+                    "📄 총 문서",
+                    f"{db_stats.get('total_documents', 0):,}개",
+                    delta=f"{len(st.session_state.history)}개 (세션)"
+                )
+            
+            with col2:
+                avg_quality = db_stats.get('avg_quality', 0)
+                st.metric(
+                    "🏆 평균 품질",
+                    f"{avg_quality:.1%}",
+                    delta="우수" if avg_quality >= 0.9 else "양호"
+                )
+            
+            with col3:
+                st.metric(
+                    "🔄 평균 반복",
+                    f"{db_stats.get('avg_iterations', 0):.1f}회"
+                )
+            
+            with col4:
+                total_time = db_stats.get('total_time', 0)
+                st.metric(
+                    "⏱️ 총 소요시간",
+                    f"{total_time:.0f}초" if total_time < 3600 else f"{total_time/3600:.1f}시간"
+                )
+            
+            # Provider statistics
+            if db_stats.get('by_provider'):
+                st.markdown("#### 🤖 모델별 통계")
+                provider_cols = st.columns(len(db_stats['by_provider']))
+                for idx, (provider, count) in enumerate(db_stats['by_provider'].items()):
+                    with provider_cols[idx]:
+                        st.metric(provider, f"{count}개")
+            
+            # Document type statistics
+            if db_stats.get('by_document_type'):
+                st.markdown("#### 📁 문서 유형별 통계")
+                doc_type_cols = st.columns(min(len(db_stats['by_document_type']), 5))
+                for idx, (doc_type, count) in enumerate(list(db_stats['by_document_type'].items())[:5]):
+                    with doc_type_cols[idx % len(doc_type_cols)]:
+                        st.metric(doc_type, f"{count}개")
+            
+            # Current document analysis (if available)
             if st.session_state.current_result and st.session_state.current_result.get("success"):
+                st.markdown("---")
+                st.markdown("### 📄 현재 문서 분석")
                 result = st.session_state.current_result
-                
-                st.markdown("### 📊 문서 분석")
                 
                 # Create beautiful analysis cards
                 col1, col2 = st.columns(2)
@@ -1447,15 +1559,62 @@ class MultiModelFinancialWritingApp:
                                     key=f"history_{idx}"
                                 )
                                 
-                                st.download_button(
-                                    label="📥 다운로드",
-                                    data=result.get('final_document', ''),
-                                    file_name=f"history_{idx}_{timestamp.strftime('%Y%m%d_%H%M%S')}.txt",
-                                    mime="text/plain",
-                                    key=f"download_{idx}"
-                                )
+                                col1_btn, col2_btn = st.columns(2)
+                                with col1_btn:
+                                    st.download_button(
+                                        label="📥 다운로드",
+                                        data=result.get('final_document', ''),
+                                        file_name=f"history_{idx}_{timestamp.strftime('%Y%m%d_%H%M%S')}.txt",
+                                        mime="text/plain",
+                                        key=f"download_{idx}",
+                                        use_container_width=True
+                                    )
+                                with col2_btn:
+                                    if result.get('document_id'):
+                                        st.caption(f"📌 DB ID: {result['document_id']}")
             else:
                 st.info("아직 생성된 문서가 없습니다. 문서를 생성하면 여기에 이력이 표시됩니다.")
+            
+            # Export options
+            st.markdown("---")
+            st.markdown("### 💾 데이터 내보내기")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if st.button("📊 JSON으로 내보내기", use_container_width=True):
+                    try:
+                        export_data = self.db.export_data("json")
+                        st.download_button(
+                            "📥 JSON 다운로드",
+                            data=export_data,
+                            file_name=f"adk_writer_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                            mime="application/json",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"Export 오류: {str(e)}")
+            
+            with col2:
+                if st.button("📋 CSV로 내보내기", use_container_width=True):
+                    try:
+                        export_data = self.db.export_data("csv")
+                        st.download_button(
+                            "📥 CSV 다운로드",
+                            data=export_data,
+                            file_name=f"adk_writer_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"Export 오류: {str(e)}")
+            
+            with col3:
+                # Database statistics
+                try:
+                    db_stats = self.db.get_statistics(days=30)
+                    st.metric("📊 전체 문서", f"{db_stats['total_documents']:,}개")
+                except:
+                    st.metric("📊 세션 문서", f"{len(st.session_state.history)}개")
 
 
 def main():
