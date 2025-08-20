@@ -68,7 +68,7 @@ class AnthropicClient(BaseModelClient):
 class OpenAIClient(BaseModelClient):
     """OpenAI GPT client"""
     
-    def __init__(self, api_key: str, model: str = "gpt-4-turbo-preview"):
+    def __init__(self, api_key: str, model: str = "gpt-4-turbo"):
         self.client = OpenAI(api_key=api_key)
         self.model = model
     
@@ -139,10 +139,11 @@ class ModelFactory:
             "claude-3-haiku-20240307": "Claude 3 Haiku (경제적)"
         },
         "OpenAI": {
-            "gpt-4-turbo-preview": "GPT-4 Turbo (최신)",
+            "gpt-4-turbo": "GPT-4 Turbo (최신)",
             "gpt-4": "GPT-4 (표준)",
-            "gpt-3.5-turbo": "GPT-3.5 Turbo (빠른 응답)",
-            "gpt-3.5-turbo-16k": "GPT-3.5 Turbo 16K (긴 컨텍스트)"
+            "gpt-4o": "GPT-4o (최적화)",
+            "gpt-4o-mini": "GPT-4o Mini (경제적)",
+            "gpt-3.5-turbo": "GPT-3.5 Turbo (빠른 응답)"
         },
         "Google": {
             "gemini-1.5-pro": "Gemini 1.5 Pro (최고 성능)",
@@ -210,7 +211,7 @@ class MultiModelAgent:
         if self.config.get('openai_api_key'):
             self.clients['OpenAI'] = OpenAIClient(
                 self.config['openai_api_key'],
-                self.config.get('openai_model', 'gpt-4-turbo-preview')
+                self.config.get('openai_model', 'gpt-4-turbo')
             )
         
         # Google

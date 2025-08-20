@@ -23,7 +23,7 @@ class Config:
         
         # OpenAI Configuration
         OPENAI_API_KEY = st.secrets.get("openai", {}).get("api_key", "")
-        OPENAI_MODEL = st.secrets.get("openai", {}).get("model", "gpt-4-turbo-preview")
+        OPENAI_MODEL = st.secrets.get("openai", {}).get("model", "gpt-4-turbo")
         
         # Default Provider
         DEFAULT_PROVIDER = st.secrets.get("app", {}).get("default_provider", "Anthropic")
@@ -50,7 +50,7 @@ class Config:
         ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
         
         OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-        OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
+        OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
         
         DEFAULT_PROVIDER = os.getenv("DEFAULT_PROVIDER", "Anthropic")
         

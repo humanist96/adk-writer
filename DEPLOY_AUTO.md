@@ -34,7 +34,7 @@ model = "claude-3-5-sonnet-20241022"
 
 [openai]
 api_key = "your_openai_api_key_here"
-model = "gpt-4-turbo-preview"
+model = "gpt-4-turbo"
 
 [model]
 name = "gemini-1.5-flash"
