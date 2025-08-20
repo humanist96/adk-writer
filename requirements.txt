@@ -1,5 +1,7 @@
 # Google ADK and AI dependencies
 google-generativeai>=0.3.0
+anthropic>=0.18.1
+openai>=1.12.0
 
 # Web framework
 streamlit>=1.29.0
