@@ -15,7 +15,8 @@
       "Bash(git remote add:*)",
       "Bash(git push:*)",
       "WebFetch(domain:localhost)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(start test_ui_component.html)"
     ],
     "deny": [],
     "ask": []

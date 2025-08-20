@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Financial Writer Pro - UI Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 2.5rem;
+            border-radius: 20px;
+            margin-bottom: 2rem;
+            color: white;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+            animation: slideDown 0.5s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header h1 {
+            font-size: 2.8rem;
+            font-weight: 800;
+            margin-bottom: 0.8rem;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.95;
+            margin-bottom: 1rem;
+        }
+
+        .provider-badges {
+            display: flex;
+            gap: 10px;
+            margin-top: 1rem;
+        }
+
+        .provider-badge {
+            padding: 0.4rem 1rem;
+            border-radius: 25px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .provider-badge:hover {
+            transform: scale(1.05);
+        }
+
+        .anthropic-badge {
+            background: linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%);
+        }
+
+        .openai-badge {
+            background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+        }
+
+        .google-badge {
+            background: linear-gradient(135deg, #4285f4 0%, #34a853 100%);
+        }
+
+        /* Layout */
+        .main-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: white;
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            height: fit-content;
+        }
+
+        .sidebar h2 {
+            color: #333;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .sidebar h3 {
+            color: #666;
+            margin: 1.5rem 0 0.8rem;
+            font-size: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #555;
+            font-size: 0.9rem;
+        }
+
+        .form-group select,
+        .form-group input[type="range"] {
+            width: 100%;
+            padding: 0.5rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .radio-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .radio-item:hover {
+            border-color: #667eea;
+            transform: translateX(5px);
+        }
+
+        .radio-item.selected {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+        }
+
+        .radio-item input[type="radio"] {
+            margin-right: 0.5rem;
+        }
+
+        /* Main Content */
+        .main-content {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-card .label {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tab {
+            padding: 0.8rem 1.5rem;
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-bottom: none;
+            border-radius: 12px 12px 0 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .tab:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        /* Document Form */
+        .document-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .form-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .form-section h3 {
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-family: inherit;
+            resize: vertical;
+            transition: all 0.3s ease;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.8rem 2rem;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            width: 100%;
+            margin-top: 1rem;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Result Display */
+        .result-display {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .quality-badge {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .quality-high {
+            background: #00b894;
+        }
+
+        .quality-medium {
+            background: #fdcb6e;
+        }
+
+        .quality-low {
+            background: #d63031;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🤖 AI Financial Writer Pro</h1>
+            <p>차세대 금융 문서 작성 AI 플랫폼</p>
+            <div class="provider-badges">
+                <span class="provider-badge anthropic-badge">Anthropic Claude</span>
+                <span class="provider-badge openai-badge">OpenAI GPT</span>
+                <span class="provider-badge google-badge">Google Gemini</span>
+            </div>
+        </div>
+
+        <div class="main-layout">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <h2>🤖 AI 모델 설정</h2>
+                
+                <h3>📦 AI 제공자</h3>
+                <div class="radio-group">
+                    <div class="radio-item selected">
+                        <input type="radio" name="provider" value="anthropic" checked>
+                        <label>Anthropic</label>
+                    </div>
+                    <div class="radio-item">
+                        <input type="radio" name="provider" value="openai">
+                        <label>OpenAI</label>
+                    </div>
+                    <div class="radio-item">
+                        <input type="radio" name="provider" value="google">
+                        <label>Google</label>
+                    </div>
+                </div>
+
+                <h3>🎯 모델 선택</h3>
+                <div class="form-group">
+                    <select>
+                        <option>Claude 3 Opus (최고 성능)</option>
+                        <option>Claude 3 Sonnet (균형)</option>
+                        <option>Claude 3 Haiku (빠른 응답)</option>
+                    </select>
+                </div>
+
+                <h3>⚙️ 모델 설정</h3>
+                <div class="form-group">
+                    <label>🌡️ Temperature (창의성): 0.7</label>
+                    <input type="range" min="0" max="1" step="0.1" value="0.7">
+                </div>
+
+                <div class="form-group">
+                    <label>📝 최대 토큰 수</label>
+                    <select>
+                        <option>1000</option>
+                        <option selected>2048</option>
+                        <option>3000</option>
+                        <option>4000</option>
+                    </select>
+                </div>
+
+                <h3>📄 문서 설정</h3>
+                <div class="form-group">
+                    <label>문서 유형</label>
+                    <select>
+                        <option>고객 안내 이메일</option>
+                        <option>투자 제안서</option>
+                        <option>금융 상품 설명서</option>
+                        <option>규정 준수 보고서</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>톤앤매너</label>
+                    <select>
+                        <option>격식있는</option>
+                        <option selected>전문적인</option>
+                        <option>전문적이면서 친근한</option>
+                        <option>친근한</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="main-content">
+                <!-- Statistics -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="label">📄 총 생성 문서</div>
+                        <div class="value">12</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">⭐ 평균 품질</div>
+                        <div class="value">92%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">🔄 평균 반복</div>
+                        <div class="value">2.3회</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">🏆 주 사용 모델</div>
+                        <div class="value">Claude</div>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="tabs">
+                    <div class="tab active">✍️ 문서 작성</div>
+                    <div class="tab">🔍 모델 비교</div>
+                    <div class="tab">📊 분석</div>
+                    <div class="tab">📚 이력</div>
+                </div>
+
+                <!-- Document Form -->
+                <div class="document-form">
+                    <div class="form-section">
+                        <h3>📝 문서 요구사항</h3>
+                        <textarea placeholder="작성하고자 하는 문서의 내용과 요구사항을 입력하세요...
+
+예시:
+- 신규 금융 상품 안내 이메일
+- 투자 제안서 초안
+- 규정 준수 보고서"></textarea>
+                        <button class="button">🚀 문서 생성</button>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>📄 생성된 문서</h3>
+                        <div class="quality-badge quality-high">🏆 우수 95%</div>
+                        <textarea readonly placeholder="생성된 문서가 여기에 표시됩니다..."></textarea>
+                        <button class="button">📥 문서 다운로드</button>
+                    </div>
+                </div>
+
+                <!-- Result Display -->
+                <div class="result-display">
+                    <h3>📊 문서 분석</h3>
+                    <p>문서 생성 후 품질 분석 결과가 여기에 표시됩니다.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Interactive JavaScript
+        document.addEventListener('DOMContentLoaded', function() {
+            // Radio button interaction
+            const radioItems = document.querySelectorAll('.radio-item');
+            radioItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    radioItems.forEach(r => r.classList.remove('selected'));
+                    this.classList.add('selected');
+                    this.querySelector('input[type="radio"]').checked = true;
+                    
+                    // Update model options based on provider
+                    updateModelOptions(this.querySelector('input[type="radio"]').value);
+                });
+            });
+
+            // Tab switching
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+
+            // Temperature slider
+            const tempSlider = document.querySelector('input[type="range"]');
+            tempSlider.addEventListener('input', function() {
+                const label = this.previousElementSibling;
+                label.textContent = `🌡️ Temperature (창의성): ${this.value}`;
+            });
+
+            function updateModelOptions(provider) {
+                const modelSelect = document.querySelector('.sidebar select');
+                modelSelect.innerHTML = '';
+                
+                const models = {
+                    'anthropic': [
+                        'Claude 3 Opus (최고 성능)',
+                        'Claude 3 Sonnet (균형)',
+                        'Claude 3 Haiku (빠른 응답)'
+                    ],
+                    'openai': [
+                        'GPT-4 Turbo (최신)',
+                        'GPT-4 (표준)',
+                        'GPT-3.5 Turbo (빠른 응답)'
+                    ],
+                    'google': [
+                        'Gemini 1.5 Pro (최고 성능)',
+                        'Gemini 1.5 Flash (빠른 응답)',
+                        'Gemini Pro (표준)'
+                    ]
+                };
+
+                models[provider].forEach(model => {
+                    const option = document.createElement('option');
+                    option.textContent = model;
+                    modelSelect.appendChild(option);
+                });
+            }
+        });
+    </script>
+</body>
+</html>

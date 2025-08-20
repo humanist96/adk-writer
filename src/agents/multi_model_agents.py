@@ -36,6 +36,7 @@ class AnthropicClient(BaseModelClient):
     def generate(self, prompt: str, **kwargs) -> str:
         """Generate response using Claude"""
         try:
+            # Using the latest Anthropic API (v0.64.0+)
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=kwargs.get('max_tokens', 2048),
@@ -44,9 +45,16 @@ class AnthropicClient(BaseModelClient):
                     {"role": "user", "content": prompt}
                 ]
             )
-            return response.content[0].text
+            # Extract text from the response
+            if hasattr(response.content[0], 'text'):
+                return response.content[0].text
+            else:
+                return str(response.content[0])
         except Exception as e:
             st.error(f"Anthropic API 오류: {str(e)}")
+            # Log the detailed error for debugging
+            import traceback
+            print(f"Anthropic Error Details: {traceback.format_exc()}")
             return ""
     
     def get_model_info(self) -> Dict[str, Any]:
