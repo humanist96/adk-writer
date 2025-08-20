@@ -634,31 +634,47 @@ class MultiModelFinancialWritingApp:
         """Create prompt for document generation"""
         doc_type = config.DOCUMENT_TYPES.get(input_data['document_type'], input_data['document_type'])
         
-        prompt = f"""당신은 전문적인 금융 문서 작성 AI입니다.
+        prompt = f"""당신은 코스콤 금융영업부의 전문 문서 작성 AI입니다.
         
-다음 요구사항에 맞는 {doc_type}을(를) 작성해주세요:
+다음 요구사항과 추가 정보를 모두 반영하여 {doc_type}을(를) 작성해주세요:
 
-요구사항: {input_data['requirements']}
+[핵심 요구사항]
+{input_data['requirements']}
+
+[문서 스타일]
 톤앤매너: {input_data['tone']}
 """
         
         if input_data.get('recipient'):
-            prompt += f"\n수신자: {input_data['recipient']}"
+            prompt += f"\n\n[수신자 정보]\n수신자: {input_data['recipient']}"
+            prompt += "\n- 수신자에게 적합한 호칭과 존칭을 사용하세요"
+            prompt += "\n- 수신자의 입장과 관심사를 고려하여 작성하세요"
         
         if input_data.get('subject'):
-            prompt += f"\n제목: {input_data['subject']}"
+            prompt += f"\n\n[제목/주제]\n{input_data['subject']}"
+            prompt += "\n- 제목과 일관성 있는 내용으로 구성하세요"
+            prompt += "\n- 핵심 메시지가 명확히 전달되도록 작성하세요"
         
         if input_data.get('additional_context'):
-            prompt += f"\n추가 컨텍스트: {input_data['additional_context']}"
+            prompt += f"\n\n[추가 컨텍스트 및 특별 지시사항]\n{input_data['additional_context']}"
+            prompt += "\n- 추가 컨텍스트의 내용을 반드시 반영하세요"
+            prompt += "\n- 특별히 강조된 사항은 문서에서 부각시켜 주세요"
         
         prompt += """
 
-다음 기준을 충족하는 전문적이고 정확한 문서를 작성해주세요:
-1. 금융 전문 용어를 정확하게 사용
-2. 규정 준수 및 법적 요구사항 충족
-3. 명확하고 간결한 문장 구성
-4. 적절한 구조와 형식
-5. 전문적이면서도 이해하기 쉬운 표현
+[작성 기준]
+1. 요구사항의 모든 내용을 빠짐없이 반영
+2. 추가 정보와 컨텍스트를 적절히 활용
+3. 금융 전문 용어를 정확하게 사용
+4. 규정 준수 및 법적 요구사항 충족
+5. 명확하고 논리적인 문장 구성
+6. 적절한 구조와 형식 준수
+7. 전문적이면서도 이해하기 쉬운 표현
+8. 코스콤 금융영업부의 전문성과 신뢰성 반영
+
+발신: 코스콤 금융영업부
+
+문서를 작성해주세요:
 """
         
         return prompt

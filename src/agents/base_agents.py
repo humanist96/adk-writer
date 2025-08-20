@@ -158,20 +158,48 @@ class DraftWriterAgent(BaseLlmAgent):
         doc_type = input_data.get("document_type", "email")
         requirements = input_data.get("requirements", "")
         tone = input_data.get("tone", "professional")
+        recipient = input_data.get("recipient", "")
+        subject = input_data.get("subject", "")
+        additional_context = input_data.get("additional_context", "")
         
+        # Build comprehensive prompt with all context
         prompt = f"""
-당신은 금융영업부의 전문 문서 작성자입니다.
-다음 요구사항에 따라 {doc_type} 문서의 초안을 작성해주세요.
+당신은 코스콤 금융영업부의 전문 문서 작성자입니다.
+다음 요구사항과 추가 정보를 모두 반영하여 {doc_type} 문서의 초안을 작성해주세요.
 
+[기본 정보]
 문서 유형: {doc_type}
 톤앤매너: {tone}
-요구사항: {requirements}
 
-다음 사항을 반드시 포함해주세요:
-1. 명확하고 전문적인 표현
-2. 금융 업계 표준 용어 사용
-3. 논리적인 구조
-4. 적절한 인사말과 맺음말
+[핵심 요구사항]
+{requirements}
+"""
+        
+        # Add optional fields if provided
+        if recipient:
+            prompt += f"\n\n[수신자 정보]\n수신자: {recipient}"
+            prompt += "\n- 수신자에게 적합한 호칭과 인사말을 사용하세요"
+            prompt += "\n- 수신자의 입장과 관심사를 고려하여 작성하세요"
+        
+        if subject:
+            prompt += f"\n\n[제목/주제]\n{subject}"
+            prompt += "\n- 제목과 일관성 있는 내용으로 구성하세요"
+            prompt += "\n- 핵심 메시지가 명확히 전달되도록 작성하세요"
+        
+        if additional_context:
+            prompt += f"\n\n[추가 컨텍스트 및 특별 지시사항]\n{additional_context}"
+            prompt += "\n- 추가 컨텍스트의 내용을 반드시 반영하세요"
+            prompt += "\n- 특별히 강조된 사항은 문서에서 부각시켜 주세요"
+        
+        prompt += """
+
+[작성 지침]
+1. 요구사항의 모든 내용을 빠짐없이 반영하세요
+2. 추가 정보와 컨텍스트를 적절히 활용하세요
+3. 금융 업계 표준 용어와 전문적인 표현을 사용하세요
+4. 논리적이고 체계적인 구조로 구성하세요
+5. 수신자와 목적에 맞는 적절한 인사말과 맺음말을 포함하세요
+6. 코스콤 금융영업부의 전문성과 신뢰성이 드러나도록 작성하세요
 
 초안을 작성해주세요:
 """
