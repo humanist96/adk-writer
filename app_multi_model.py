@@ -787,16 +787,26 @@ class MultiModelFinancialWritingApp:
                 help="작성할 문서의 유형을 선택하세요"
             )
             
+            # Get tone value, ensuring it's in the options list
+            tone_options = ["formal", "professional", "professional_premium", "analytical", "urgent", "sophisticated", "ceremonial", "legal", "friendly"]
+            example_tone = st.session_state.get('example_tone', 'professional')
+            # If the example tone is not in options, default to professional
+            if example_tone not in tone_options:
+                example_tone = 'professional'
+            
             tone = st.select_slider(
                 "톤앤매너",
-                options=["formal", "professional", "professional_premium", "analytical", "urgent", "friendly"],
-                value=st.session_state.get('example_tone', 'professional'),
+                options=tone_options,
+                value=example_tone,
                 format_func=lambda x: {
                     "formal": "격식있는",
                     "professional": "전문적인",
                     "professional_premium": "프리미엄 (VIP용)",
                     "analytical": "분석적인",
                     "urgent": "긴급한",
+                    "sophisticated": "세련된",
+                    "ceremonial": "의전용",
+                    "legal": "법적/공식",
                     "friendly": "친근한"
                 }.get(x, x),
                 help="문서의 톤을 선택하세요"
