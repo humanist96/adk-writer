@@ -64,7 +64,8 @@ env/
 .DS_Store
 
 # Streamlit
-.streamlit/cache/
+.streamlit/secrets.toml
+.streamlit/*.localcache/
 .streamlit/secrets.toml
 
 # Environment variables
