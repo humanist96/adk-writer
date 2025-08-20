@@ -4,11 +4,19 @@ Supports Anthropic Claude, OpenAI GPT, and Google Gemini
 """
 
 import streamlit as st
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import json
 from datetime import datetime
 from pathlib import Path
 import time
+
+# Page configuration
+st.set_page_config(
+    page_title="AI Financial Writer Pro - Multi Model",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # Try cloud config first, fallback to local
 try:
@@ -28,50 +36,89 @@ from src.tools.custom_tools import (
     calculate_quality_score
 )
 
-# Configure page
-st.set_page_config(
-    page_title="AI Financial Writer Pro - Multi Model",
-    page_icon="🤖",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Custom CSS
+# Custom CSS for modern UI
 st.markdown("""
 <style>
+    /* Main App Styling */
     .stApp {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
     }
     
+    /* Header Styling */
     .main-header {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 16px;
+        padding: 2.5rem;
+        border-radius: 20px;
         margin-bottom: 2rem;
         color: white;
+        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        animation: slideDown 0.5s ease-out;
     }
     
-    .model-card {
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    /* Card Styling */
+    .stat-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        margin-bottom: 1rem;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        border: 1px solid rgba(255, 255, 255, 0.8);
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    }
+    
+    /* Model Selection Cards */
+    .model-selector {
         background: white;
         border-radius: 12px;
         padding: 1rem;
+        margin: 0.5rem 0;
         border: 2px solid #e2e8f0;
-        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .model-selector:hover {
+        border-color: #667eea;
+        transform: translateX(5px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    }
+    
+    .model-selector.selected {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: #667eea;
+    }
+    
+    /* Provider Badges */
+    .provider-badge {
+        display: inline-block;
+        padding: 0.4rem 1rem;
+        border-radius: 25px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin: 0.25rem;
         transition: all 0.3s ease;
     }
     
-    .model-card:hover {
-        border-color: #667eea;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
-    }
-    
-    .provider-badge {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.875rem;
-        font-weight: 600;
-        margin-right: 0.5rem;
+    .provider-badge:hover {
+        transform: scale(1.05);
     }
     
     .anthropic-badge {
@@ -89,43 +136,104 @@ st.markdown("""
         color: white;
     }
     
-    .stat-card {
-        background: white;
-        border-radius: 12px;
-        padding: 1.5rem;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        margin-bottom: 1rem;
-    }
-    
+    /* Metric Values */
     .metric-value {
-        font-size: 2rem;
+        font-size: 2.5rem;
         font-weight: 700;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        animation: pulse 2s ease-in-out infinite;
     }
     
-    .comparison-panel {
-        background: white;
-        border-radius: 12px;
-        padding: 1.5rem;
-        border: 2px solid #e2e8f0;
-        margin-bottom: 1rem;
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.8; }
     }
     
+    /* Button Styling */
     .stButton > button {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
         border: none;
-        padding: 0.75rem 2rem;
+        padding: 0.8rem 2rem;
         border-radius: 12px;
         font-weight: 600;
-        width: 100%;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
     }
     
     .stButton > button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Sidebar Styling */
+    .css-1d391kg {
+        background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+    }
+    
+    /* Tab Styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 12px;
+        padding: 0.5rem 1.5rem;
+        background: white;
+        border: 2px solid #e2e8f0;
+        transition: all 0.3s ease;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        border-color: #667eea;
+        transform: translateY(-2px);
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: transparent;
+    }
+    
+    /* Success/Error Messages */
+    .stSuccess {
+        background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 1rem;
+    }
+    
+    .stError {
+        background: linear-gradient(135deg, #ff7675 0%, #d63031 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 1rem;
+    }
+    
+    /* Text Area Styling */
+    .stTextArea textarea {
+        border-radius: 12px;
+        border: 2px solid #e2e8f0;
+        transition: all 0.3s ease;
+    }
+    
+    .stTextArea textarea:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    /* Select Box Styling */
+    .stSelectbox > div > div {
+        border-radius: 12px;
+        border: 2px solid #e2e8f0;
+        transition: all 0.3s ease;
+    }
+    
+    .stSelectbox > div > div:focus-within {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -155,112 +263,163 @@ class MultiModelFinancialWritingApp:
         if 'selected_provider' not in st.session_state:
             st.session_state.selected_provider = config.DEFAULT_PROVIDER
         if 'selected_model' not in st.session_state:
-            st.session_state.selected_model = None
+            st.session_state.selected_model = config.ANTHROPIC_MODEL if config.DEFAULT_PROVIDER == "Anthropic" else None
     
     def render_header(self):
-        """Render header"""
+        """Render animated header"""
         st.markdown("""
         <div class="main-header">
-            <h1 style="margin: 0; font-size: 2.5rem;">🤖 AI Financial Writer Pro - Multi Model</h1>
-            <p style="margin-top: 0.5rem; opacity: 0.9;">
-                차세대 금융 문서 작성 AI | Anthropic Claude • OpenAI GPT • Google Gemini
+            <h1 style="margin: 0; font-size: 2.8rem; font-weight: 800;">
+                🤖 AI Financial Writer Pro
+            </h1>
+            <p style="margin-top: 0.8rem; font-size: 1.2rem; opacity: 0.95;">
+                차세대 금융 문서 작성 AI 플랫폼
             </p>
+            <div style="margin-top: 1rem;">
+                <span class="provider-badge anthropic-badge">Anthropic Claude</span>
+                <span class="provider-badge openai-badge">OpenAI GPT</span>
+                <span class="provider-badge google-badge">Google Gemini</span>
+            </div>
         </div>
         """, unsafe_allow_html=True)
     
-    def render_model_selector(self):
-        """Render model selection UI"""
-        st.markdown("## 🎯 AI 모델 선택")
+    def render_sidebar_model_selector(self):
+        """Render model selection in sidebar"""
+        st.sidebar.markdown("## 🤖 AI 모델 설정")
         
-        # Get available models
         available_models = ModelFactory.get_available_models()
-        
-        # Provider selection
-        col1, col2, col3 = st.columns(3)
-        
         providers_available = []
         
-        with col1:
-            if config.ANTHROPIC_API_KEY:
-                providers_available.append("Anthropic")
-                if st.button("🔴 Anthropic Claude", type="secondary" if st.session_state.selected_provider != "Anthropic" else "primary"):
-                    st.session_state.selected_provider = "Anthropic"
-                    st.rerun()
+        # Check available providers
+        if config.ANTHROPIC_API_KEY:
+            providers_available.append("Anthropic")
+        if config.OPENAI_API_KEY:
+            providers_available.append("OpenAI")
+        if config.GOOGLE_API_KEY:
+            providers_available.append("Google")
         
-        with col2:
-            if config.OPENAI_API_KEY:
-                providers_available.append("OpenAI")
-                if st.button("🔵 OpenAI GPT", type="secondary" if st.session_state.selected_provider != "OpenAI" else "primary"):
-                    st.session_state.selected_provider = "OpenAI"
-                    st.rerun()
+        if not providers_available:
+            st.sidebar.error("⚠️ API 키가 설정되지 않았습니다.")
+            return providers_available
         
-        with col3:
-            if config.GOOGLE_API_KEY:
-                providers_available.append("Google")
-                if st.button("🟢 Google Gemini", type="secondary" if st.session_state.selected_provider != "Google" else "primary"):
-                    st.session_state.selected_provider = "Google"
-                    st.rerun()
+        # Provider selection
+        st.sidebar.markdown("### 📦 AI 제공자")
+        selected_provider = st.sidebar.radio(
+            "제공자 선택",
+            options=providers_available,
+            index=providers_available.index(st.session_state.selected_provider) if st.session_state.selected_provider in providers_available else 0,
+            label_visibility="collapsed",
+            help="사용할 AI 제공자를 선택하세요"
+        )
+        
+        if selected_provider != st.session_state.selected_provider:
+            st.session_state.selected_provider = selected_provider
+            st.session_state.selected_model = None
+            st.rerun()
         
         # Model selection for current provider
-        if st.session_state.selected_provider and st.session_state.selected_provider in available_models:
-            st.markdown(f"### 모델 선택: {st.session_state.selected_provider}")
+        if selected_provider in available_models:
+            st.sidebar.markdown("### 🎯 모델 선택")
             
-            models = available_models[st.session_state.selected_provider]
+            models = available_models[selected_provider]
+            model_options = list(models.keys())
+            model_labels = list(models.values())
             
-            # Create model cards
-            cols = st.columns(2)
-            for idx, (model_id, model_name) in enumerate(models.items()):
-                with cols[idx % 2]:
-                    if st.button(
-                        f"{model_name}",
-                        key=f"model_{model_id}",
-                        help=f"모델 ID: {model_id}"
-                    ):
-                        st.session_state.selected_model = model_id
-                        st.success(f"✅ {model_name} 선택됨")
+            # Set default model index
+            if st.session_state.selected_model and st.session_state.selected_model in model_options:
+                default_index = model_options.index(st.session_state.selected_model)
+            else:
+                default_index = 0
+                st.session_state.selected_model = model_options[0]
             
-            # Show current selection
-            if st.session_state.selected_model:
-                st.info(f"현재 선택된 모델: **{models.get(st.session_state.selected_model, st.session_state.selected_model)}**")
+            selected_model = st.sidebar.selectbox(
+                "모델",
+                options=model_options,
+                format_func=lambda x: models[x],
+                index=default_index,
+                label_visibility="collapsed",
+                help="사용할 AI 모델을 선택하세요"
+            )
+            
+            if selected_model != st.session_state.selected_model:
+                st.session_state.selected_model = selected_model
+            
+            # Model features
+            with st.sidebar.expander("🌟 모델 특징", expanded=False):
+                if selected_provider == "Anthropic":
+                    st.markdown("""
+                    **Claude 특징:**
+                    - 📚 긴 컨텍스트 처리 (200K 토큰)
+                    - 🎯 높은 정확도와 일관성
+                    - 💡 뛰어난 추론 능력
+                    - 🔒 안전하고 신뢰할 수 있는 응답
+                    """)
+                elif selected_provider == "OpenAI":
+                    st.markdown("""
+                    **GPT 특징:**
+                    - 🌍 다양한 언어 지원
+                    - 🎨 창의적인 콘텐츠 생성
+                    - 🔧 강력한 코드 생성
+                    - 📊 데이터 분석 능력
+                    """)
+                elif selected_provider == "Google":
+                    st.markdown("""
+                    **Gemini 특징:**
+                    - ⚡ 빠른 응답 속도
+                    - 🖼️ 멀티모달 지원
+                    - 💰 비용 효율적
+                    - 🔄 실시간 업데이트
+                    """)
         
         return providers_available
     
     def render_stats(self):
-        """Render statistics"""
+        """Render animated statistics"""
+        st.markdown("### 📊 통계")
+        
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
+            st.markdown('<div class="stat-card">', unsafe_allow_html=True)
             st.metric(
-                "총 생성 문서",
+                "📄 총 생성 문서",
                 st.session_state.stats['total_documents'],
                 "+1" if st.session_state.stats['total_documents'] > 0 else None
             )
+            st.markdown('</div>', unsafe_allow_html=True)
         
         with col2:
+            st.markdown('<div class="stat-card">', unsafe_allow_html=True)
+            quality_value = st.session_state.stats['avg_quality']
+            quality_delta = (quality_value - 0.7) * 100 if quality_value > 0 else 0
             st.metric(
-                "평균 품질",
-                f"{st.session_state.stats['avg_quality']:.1%}",
-                f"+{(st.session_state.stats['avg_quality'] - 0.7) * 100:.0f}%" if st.session_state.stats['avg_quality'] > 0 else None
+                "⭐ 평균 품질",
+                f"{quality_value:.1%}",
+                f"+{quality_delta:.0f}%" if quality_delta > 0 else None
             )
+            st.markdown('</div>', unsafe_allow_html=True)
         
         with col3:
+            st.markdown('<div class="stat-card">', unsafe_allow_html=True)
             st.metric(
-                "평균 반복",
+                "🔄 평균 반복",
                 f"{st.session_state.stats['avg_iterations']:.1f}회",
                 None
             )
+            st.markdown('</div>', unsafe_allow_html=True)
         
         with col4:
-            # Show most used model
+            st.markdown('<div class="stat-card">', unsafe_allow_html=True)
             if st.session_state.stats['models_used']:
                 most_used = max(st.session_state.stats['models_used'].items(), key=lambda x: x[1])
                 st.metric(
-                    "주로 사용된 모델",
-                    most_used[0],
-                    f"{most_used[1]}회 사용"
+                    "🏆 주 사용 모델",
+                    most_used[0].split(' - ')[0],
+                    f"{most_used[1]}회"
                 )
             else:
-                st.metric("주로 사용된 모델", "-", None)
+                st.metric("🏆 주 사용 모델", "-", None)
+            st.markdown('</div>', unsafe_allow_html=True)
     
     def process_document(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process document through the pipeline"""
@@ -270,9 +429,9 @@ class MultiModelFinancialWritingApp:
                 agent_config = config.get_agent_config()
                 self.multi_model_agent = MultiModelAgent(agent_config)
             
-            # Show progress
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+            # Show progress with animation
+            progress_placeholder = st.empty()
+            status_placeholder = st.empty()
             
             # Get selected provider and model
             provider = st.session_state.selected_provider
@@ -287,15 +446,21 @@ class MultiModelFinancialWritingApp:
                 elif provider == "Google":
                     self.multi_model_agent.config['google_model'] = model
             
-            # Generate document using multi-model agent
-            status_text.text(f"모델 준비 중... ({provider})")
-            progress_bar.progress(20)
+            # Animated progress
+            with progress_placeholder.container():
+                progress_bar = st.progress(0)
+                for i in range(0, 101, 5):
+                    progress_bar.progress(i)
+                    if i < 30:
+                        status_placeholder.info(f"🔧 모델 준비 중... ({provider})")
+                    elif i < 70:
+                        status_placeholder.info(f"✍️ 문서 생성 중... ({provider})")
+                    else:
+                        status_placeholder.info("🔍 품질 검증 중...")
+                    time.sleep(0.1)
             
             # Create prompt for document generation
             prompt = self._create_prompt(input_data)
-            
-            status_text.text(f"문서 생성 중... ({provider})")
-            progress_bar.progress(50)
             
             # Generate response
             response = self.multi_model_agent.generate(
@@ -305,17 +470,15 @@ class MultiModelFinancialWritingApp:
                 max_tokens=input_data.get('max_tokens', 2048)
             )
             
-            progress_bar.progress(80)
-            status_text.text("품질 검증 중...")
+            # Clear progress
+            progress_placeholder.empty()
+            status_placeholder.empty()
             
             # Validation
             final_doc = response.content
             term_validation = validate_financial_terms(final_doc)
             compliance_check = check_compliance(final_doc, input_data.get("document_type", "email"))
             final_score = calculate_quality_score(final_doc, term_validation, compliance_check)
-            
-            progress_bar.progress(100)
-            status_text.text("완료!")
             
             # Update model usage stats
             model_key = f"{provider} - {response.model_used}"
@@ -344,6 +507,8 @@ class MultiModelFinancialWritingApp:
             return result
             
         except Exception as e:
+            progress_placeholder.empty()
+            status_placeholder.empty()
             return {"error": str(e), "success": False}
     
     def _create_prompt(self, input_data: Dict[str, Any]) -> str:
@@ -403,27 +568,23 @@ class MultiModelFinancialWritingApp:
         # Header
         self.render_header()
         
-        # Model selector
-        providers_available = self.render_model_selector()
-        
-        if not providers_available:
-            st.error("⚠️ API 키가 설정되지 않았습니다. Streamlit secrets 또는 환경 변수를 확인해주세요.")
-            st.stop()
-        
-        st.divider()
-        
-        # Stats
-        self.render_stats()
-        
-        # Sidebar
+        # Sidebar with model selection and settings
         with st.sidebar:
-            st.markdown("## ⚙️ 설정")
+            st.markdown("---")
+            
+            # Model selector in sidebar
+            providers_available = self.render_sidebar_model_selector()
+            
+            if not providers_available:
+                st.stop()
+            
+            st.markdown("---")
             
             # Model settings
-            st.markdown("### 🤖 모델 설정")
+            st.markdown("## ⚙️ 모델 설정")
             
             temperature = st.slider(
-                "Temperature (창의성)",
+                "🌡️ Temperature (창의성)",
                 min_value=0.0,
                 max_value=1.0,
                 value=config.TEMPERATURE,
@@ -432,22 +593,24 @@ class MultiModelFinancialWritingApp:
             )
             
             max_tokens = st.number_input(
-                "최대 토큰 수",
+                "📝 최대 토큰 수",
                 min_value=500,
                 max_value=4000,
                 value=config.MAX_OUTPUT_TOKENS,
-                step=100
+                step=100,
+                help="생성할 텍스트의 최대 길이"
             )
             
-            st.divider()
+            st.markdown("---")
             
             # Document settings
-            st.markdown("### 📄 문서 설정")
+            st.markdown("## 📄 문서 설정")
             
             doc_type = st.selectbox(
                 "문서 유형",
                 options=list(config.DOCUMENT_TYPES.keys()),
-                format_func=lambda x: config.DOCUMENT_TYPES[x]
+                format_func=lambda x: config.DOCUMENT_TYPES[x],
+                help="작성할 문서의 유형을 선택하세요"
             )
             
             tone = st.select_slider(
@@ -459,90 +622,107 @@ class MultiModelFinancialWritingApp:
                     "professional": "전문적인",
                     "professional_friendly": "전문적이면서 친근한",
                     "friendly": "친근한"
-                }.get(x, x)
+                }.get(x, x),
+                help="문서의 톤을 선택하세요"
             )
             
-            st.divider()
+            st.markdown("---")
             
-            with st.expander("🎨 모델별 특징"):
-                st.markdown("""
-                **Anthropic Claude**
-                - 긴 컨텍스트 처리 우수
-                - 논리적이고 체계적인 작성
-                - 복잡한 분석에 강점
-                
-                **OpenAI GPT**
-                - 범용성과 균형잡힌 성능
-                - 창의적인 작성에 강점
-                - 다양한 스타일 지원
-                
-                **Google Gemini**
-                - 빠른 응답 속도
-                - 효율적인 처리
-                - 멀티모달 지원
-                """)
+            # Quick actions
+            st.markdown("## 🚀 빠른 실행")
             
-            st.divider()
-            
-            if st.button("🔄 초기화"):
+            if st.button("🔄 초기화", use_container_width=True):
                 st.session_state.history = []
                 st.session_state.current_result = None
                 st.rerun()
+            
+            if st.button("📊 통계 초기화", use_container_width=True):
+                st.session_state.stats = {
+                    'total_documents': 0,
+                    'avg_quality': 0,
+                    'avg_iterations': 0,
+                    'total_time': 0,
+                    'models_used': {}
+                }
+                st.rerun()
         
-        # Main content
-        tab1, tab2, tab3, tab4 = st.tabs(["✍️ 문서 작성", "🔍 모델 비교", "📊 비교 분석", "📚 이력"])
+        # Main content area
+        st.markdown("---")
+        
+        # Stats dashboard
+        self.render_stats()
+        
+        st.markdown("---")
+        
+        # Tabs for different features
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "✍️ 문서 작성",
+            "🔍 모델 비교",
+            "📊 분석",
+            "📚 이력"
+        ])
         
         with tab1:
-            col1, col2 = st.columns([1, 1])
+            col1, col2 = st.columns([1, 1], gap="large")
             
             with col1:
                 st.markdown("### 📝 문서 요구사항")
                 
                 requirements = st.text_area(
                     "요구사항",
-                    placeholder="작성하고자 하는 문서의 내용과 요구사항을 입력하세요...",
-                    height=200,
+                    placeholder="작성하고자 하는 문서의 내용과 요구사항을 입력하세요...\n\n예시:\n- 신규 금융 상품 안내 이메일\n- 투자 제안서 초안\n- 규정 준수 보고서",
+                    height=250,
                     label_visibility="collapsed"
                 )
                 
-                with st.expander("추가 정보"):
-                    recipient = st.text_input("수신자")
-                    subject = st.text_input("제목")
-                    additional_context = st.text_area("추가 컨텍스트", height=100)
+                with st.expander("📎 추가 정보", expanded=False):
+                    recipient = st.text_input("수신자", placeholder="예: 김철수 대표님")
+                    subject = st.text_input("제목", placeholder="예: 2024년 신규 투자 상품 안내")
+                    additional_context = st.text_area(
+                        "추가 컨텍스트",
+                        placeholder="특별히 강조하거나 포함해야 할 내용을 입력하세요...",
+                        height=100
+                    )
                 
-                if st.button("🚀 문서 생성", type="primary"):
-                    if requirements:
-                        if not st.session_state.selected_model:
-                            st.warning("먼저 AI 모델을 선택해주세요.")
-                        else:
-                            input_data = {
-                                "document_type": doc_type,
-                                "requirements": requirements,
-                                "tone": tone,
-                                "recipient": recipient,
-                                "subject": subject,
-                                "additional_context": additional_context,
-                                "temperature": temperature,
-                                "max_tokens": max_tokens
-                            }
-                            
-                            with st.spinner(f"{st.session_state.selected_provider} AI가 문서를 작성 중입니다..."):
-                                result = self.process_document(input_data)
-                            
-                            st.session_state.current_result = result
-                            st.session_state.history.append({
-                                "timestamp": datetime.now().isoformat(),
-                                "input": input_data,
-                                "result": result
-                            })
-                            
-                            if result.get("success"):
-                                st.success(f"✅ 문서 생성 완료! (모델: {result.get('model_used', 'Unknown')})")
-                                st.balloons()
+                col1_1, col1_2 = st.columns(2)
+                with col1_1:
+                    if st.button("🚀 문서 생성", type="primary", use_container_width=True):
+                        if requirements:
+                            if not st.session_state.selected_model:
+                                st.warning("먼저 사이드바에서 AI 모델을 선택해주세요.")
                             else:
-                                st.error(f"❌ 오류: {result.get('error')}")
-                    else:
-                        st.warning("요구사항을 입력해주세요.")
+                                input_data = {
+                                    "document_type": doc_type,
+                                    "requirements": requirements,
+                                    "tone": tone,
+                                    "recipient": recipient,
+                                    "subject": subject,
+                                    "additional_context": additional_context,
+                                    "temperature": temperature,
+                                    "max_tokens": max_tokens
+                                }
+                                
+                                result = self.process_document(input_data)
+                                
+                                st.session_state.current_result = result
+                                st.session_state.history.append({
+                                    "timestamp": datetime.now().isoformat(),
+                                    "input": input_data,
+                                    "result": result
+                                })
+                                
+                                if result.get("success"):
+                                    st.success(f"✅ 문서 생성 완료! (모델: {result.get('model_used', 'Unknown')})")
+                                    st.balloons()
+                                else:
+                                    st.error(f"❌ 오류: {result.get('error')}")
+                        else:
+                            st.warning("요구사항을 입력해주세요.")
+                
+                with col1_2:
+                    if st.button("🎲 예시 입력", use_container_width=True):
+                        st.session_state.example_text = "고액 자산가를 위한 프리미엄 자산관리 서비스 안내 이메일을 작성해주세요. VIP 고객 대상으로 전문적이면서도 품격있는 톤으로 작성하고, 맞춤형 포트폴리오 관리와 세무 자문 서비스를 강조해주세요."
+                        st.rerun()
             
             with col2:
                 st.markdown("### 📄 생성된 문서")
@@ -550,9 +730,39 @@ class MultiModelFinancialWritingApp:
                 if st.session_state.current_result and st.session_state.current_result.get("success"):
                     result = st.session_state.current_result
                     
-                    # Show model info
-                    st.markdown(f"**사용된 모델**: {result.get('provider', 'Unknown')} - {result.get('model_used', 'Unknown')}")
+                    # Model info badge
+                    provider = result.get('provider', 'Unknown')
+                    model = result.get('model_used', 'Unknown')
                     
+                    col2_1, col2_2 = st.columns([2, 1])
+                    with col2_1:
+                        st.markdown(f"""
+                        <div style="padding: 0.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                    color: white; border-radius: 10px; text-align: center; margin-bottom: 1rem;">
+                            <strong>🤖 {provider}</strong> | {model}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    with col2_2:
+                        quality_score = result.get('quality_score', 0)
+                        if quality_score >= 0.9:
+                            quality_badge = "🏆 우수"
+                            quality_color = "#00b894"
+                        elif quality_score >= 0.8:
+                            quality_badge = "✅ 양호"
+                            quality_color = "#fdcb6e"
+                        else:
+                            quality_badge = "⚠️ 개선필요"
+                            quality_color = "#d63031"
+                        
+                        st.markdown(f"""
+                        <div style="padding: 0.5rem; background: {quality_color}; 
+                                    color: white; border-radius: 10px; text-align: center; margin-bottom: 1rem;">
+                            {quality_badge} {quality_score:.1%}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # Document content
                     st.text_area(
                         "최종 문서",
                         value=result.get("final_document", ""),
@@ -560,22 +770,32 @@ class MultiModelFinancialWritingApp:
                         label_visibility="collapsed"
                     )
                     
+                    # Metrics
                     col2_1, col2_2, col2_3 = st.columns(3)
                     with col2_1:
-                        st.metric("품질 점수", f"{result.get('quality_score', 0):.1%}")
+                        st.metric("⏱️ 처리 시간", f"{result.get('total_time', 0):.1f}초")
                     with col2_2:
-                        st.metric("처리 시간", f"{result.get('total_time', 0):.1f}초")
+                        doc_length = len(result.get("final_document", ""))
+                        st.metric("📏 문서 길이", f"{doc_length:,}자")
                     with col2_3:
-                        st.metric("모델", result.get('provider', '-'))
+                        word_count = len(result.get("final_document", "").split())
+                        st.metric("📝 단어 수", f"{word_count:,}개")
                     
+                    # Download button
                     st.download_button(
                         label="📥 문서 다운로드",
                         data=result["final_document"],
-                        file_name=f"document_{result.get('provider', 'ai')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                        mime="text/plain"
+                        file_name=f"document_{provider}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                        mime="text/plain",
+                        use_container_width=True
                     )
                 else:
-                    st.info("문서를 생성하려면 왼쪽에서 요구사항을 입력하고 '문서 생성' 버튼을 클릭하세요.")
+                    st.info("💡 왼쪽에서 요구사항을 입력하고 '문서 생성' 버튼을 클릭하세요.")
+                    
+                    # Show example if available
+                    if hasattr(st.session_state, 'example_text'):
+                        st.markdown("#### 예시 요구사항:")
+                        st.info(st.session_state.example_text)
         
         with tab2:
             st.markdown("### 🔍 여러 모델 비교")
@@ -584,11 +804,27 @@ class MultiModelFinancialWritingApp:
             compare_requirements = st.text_area(
                 "비교할 문서 요구사항",
                 placeholder="모든 모델에서 테스트할 요구사항을 입력하세요...",
-                height=150
+                height=150,
+                key="compare_requirements"
             )
             
-            if st.button("🔬 모든 모델로 생성", type="primary"):
-                if compare_requirements:
+            # Model selection for comparison
+            st.markdown("#### 비교할 모델 선택")
+            col1, col2, col3 = st.columns(3)
+            
+            compare_models = []
+            with col1:
+                if config.ANTHROPIC_API_KEY and st.checkbox("Anthropic Claude", value=True):
+                    compare_models.append("Anthropic")
+            with col2:
+                if config.OPENAI_API_KEY and st.checkbox("OpenAI GPT", value=True):
+                    compare_models.append("OpenAI")
+            with col3:
+                if config.GOOGLE_API_KEY and st.checkbox("Google Gemini", value=True):
+                    compare_models.append("Google")
+            
+            if st.button("🔬 선택한 모델로 비교 생성", type="primary", use_container_width=True):
+                if compare_requirements and compare_models:
                     if not self.multi_model_agent:
                         agent_config = config.get_agent_config()
                         self.multi_model_agent = MultiModelAgent(agent_config)
@@ -604,28 +840,63 @@ class MultiModelFinancialWritingApp:
                     
                     prompt = self._create_prompt(input_data)
                     
-                    # Compare across all available providers
-                    with st.spinner("모든 모델로 문서를 생성 중입니다..."):
-                        results = self.multi_model_agent.compare_models(prompt)
+                    # Progress bar for comparison
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
                     
-                    # Display results
-                    for provider, response in results.items():
-                        with st.expander(f"{provider} - {response.model_used}"):
-                            st.text_area(
-                                f"{provider} 결과",
-                                value=response.content,
-                                height=300,
-                                label_visibility="collapsed"
-                            )
-                            
-                            # Calculate quality score
-                            term_validation = validate_financial_terms(response.content)
-                            compliance_check = check_compliance(response.content, doc_type)
-                            quality_score = calculate_quality_score(response.content, term_validation, compliance_check)
-                            
-                            st.metric("품질 점수", f"{quality_score:.1%}")
+                    results = {}
+                    for idx, provider in enumerate(compare_models):
+                        status_text.text(f"🤖 {provider} 모델로 생성 중...")
+                        progress_bar.progress((idx + 1) / len(compare_models))
+                        
+                        try:
+                            response = self.multi_model_agent.generate(prompt, provider=provider)
+                            results[provider] = response
+                        except Exception as e:
+                            st.error(f"{provider} 오류: {str(e)}")
+                    
+                    progress_bar.empty()
+                    status_text.empty()
+                    
+                    # Display comparison results
+                    if results:
+                        st.markdown("#### 📊 비교 결과")
+                        
+                        # Create columns for side-by-side comparison
+                        cols = st.columns(len(results))
+                        
+                        for idx, (provider, response) in enumerate(results.items()):
+                            with cols[idx]:
+                                st.markdown(f"##### {provider}")
+                                
+                                # Calculate quality score
+                                term_validation = validate_financial_terms(response.content)
+                                compliance_check = check_compliance(response.content, doc_type)
+                                quality_score = calculate_quality_score(response.content, term_validation, compliance_check)
+                                
+                                # Quality badge
+                                if quality_score >= 0.9:
+                                    st.success(f"품질: {quality_score:.1%}")
+                                elif quality_score >= 0.8:
+                                    st.warning(f"품질: {quality_score:.1%}")
+                                else:
+                                    st.error(f"품질: {quality_score:.1%}")
+                                
+                                st.text_area(
+                                    f"{provider} 결과",
+                                    value=response.content,
+                                    height=400,
+                                    label_visibility="collapsed",
+                                    key=f"compare_{provider}"
+                                )
+                                
+                                st.metric("모델", response.model_used)
+                                st.metric("문자 수", f"{len(response.content):,}")
                 else:
-                    st.warning("비교할 요구사항을 입력해주세요.")
+                    if not compare_requirements:
+                        st.warning("비교할 요구사항을 입력해주세요.")
+                    if not compare_models:
+                        st.warning("비교할 모델을 선택해주세요.")
         
         with tab3:
             if st.session_state.current_result and st.session_state.current_result.get("success"):
@@ -633,34 +904,62 @@ class MultiModelFinancialWritingApp:
                 
                 st.markdown("### 📊 문서 분석")
                 
-                # Quality metrics
-                st.markdown("#### 품질 지표")
-                col1, col2, col3, col4 = st.columns(4)
+                # Create beautiful analysis cards
+                col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.metric("전체 품질", f"{result.get('quality_score', 0):.1%}")
+                    st.markdown("#### 🎯 품질 지표")
+                    
+                    validation = result.get('validation', {})
+                    
+                    # Quality score visualization
+                    quality_score = result.get('quality_score', 0)
+                    st.progress(quality_score)
+                    
+                    # Detailed metrics
+                    st.markdown(f"""
+                    <div class="stat-card">
+                        <h4>상세 평가</h4>
+                        <ul>
+                            <li>전체 품질: <strong>{quality_score:.1%}</strong></li>
+                            <li>용어 정확도: <strong>{validation.get('terms', {}).get('score', 0):.1%}</strong></li>
+                            <li>규정 준수: <strong>{'✅ 준수' if validation.get('compliance', {}).get('is_compliant') else '❌ 미준수'}</strong></li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
                 with col2:
-                    validation = result.get('validation', {})
-                    st.metric("용어 정확도", f"{validation.get('terms', {}).get('score', 0):.1%}")
+                    st.markdown("#### 📈 문서 통계")
+                    
+                    doc = result.get('final_document', '')
+                    
+                    # Text statistics
+                    char_count = len(doc)
+                    word_count = len(doc.split())
+                    sentence_count = doc.count('.') + doc.count('!') + doc.count('?')
+                    
+                    st.markdown(f"""
+                    <div class="stat-card">
+                        <h4>텍스트 분석</h4>
+                        <ul>
+                            <li>문자 수: <strong>{char_count:,}</strong></li>
+                            <li>단어 수: <strong>{word_count:,}</strong></li>
+                            <li>문장 수: <strong>{sentence_count:,}</strong></li>
+                            <li>평균 문장 길이: <strong>{word_count/max(sentence_count, 1):.1f} 단어</strong></li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
-                with col3:
-                    st.metric("규정 준수", "✅ 준수" if validation.get('compliance', {}).get('is_compliant') else "❌ 미준수")
-                
-                with col4:
-                    st.metric("사용 모델", result.get('provider', '-'))
-                
-                # Document stats
-                st.markdown("#### 문서 통계")
-                doc = result.get('final_document', '')
+                # Model performance
+                st.markdown("#### ⚡ 모델 성능")
                 
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("문자 수", f"{len(doc):,}")
+                    st.metric("🤖 사용 모델", result.get('provider', '-'))
                 with col2:
-                    st.metric("단어 수", f"{len(doc.split()):,}")
+                    st.metric("⏱️ 처리 시간", f"{result.get('total_time', 0):.1f}초")
                 with col3:
-                    st.metric("문장 수", f"{doc.count('.') + doc.count('!') + doc.count('?'):,}")
+                    st.metric("🔄 반복 횟수", result.get('iterations', 1))
             else:
                 st.info("먼저 문서를 생성해주세요.")
         
@@ -668,30 +967,68 @@ class MultiModelFinancialWritingApp:
             if st.session_state.history:
                 st.markdown("### 📚 문서 생성 이력")
                 
-                for idx, item in enumerate(reversed(st.session_state.history), 1):
+                # History filter
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    search_term = st.text_input("🔍 검색", placeholder="이력에서 검색...")
+                with col2:
+                    sort_order = st.selectbox("정렬", ["최신순", "오래된순", "품질순"])
+                
+                # Sort history
+                sorted_history = st.session_state.history.copy()
+                if sort_order == "최신순":
+                    sorted_history.reverse()
+                elif sort_order == "품질순":
+                    sorted_history.sort(key=lambda x: x['result'].get('quality_score', 0), reverse=True)
+                
+                # Filter history
+                if search_term:
+                    sorted_history = [
+                        item for item in sorted_history
+                        if search_term.lower() in str(item).lower()
+                    ]
+                
+                # Display history
+                for idx, item in enumerate(sorted_history, 1):
                     timestamp = datetime.fromisoformat(item['timestamp'])
                     result = item['result']
                     
-                    with st.expander(
-                        f"문서 #{len(st.session_state.history) - idx + 1} - "
-                        f"{timestamp.strftime('%Y-%m-%d %H:%M')} - "
-                        f"{result.get('provider', 'Unknown')}"
-                    ):
-                        st.write(f"**문서 유형**: {item['input']['document_type']}")
-                        st.write(f"**톤**: {item['input']['tone']}")
-                        st.write(f"**모델**: {result.get('provider', '-')} - {result.get('model_used', '-')}")
-                        st.write(f"**품질 점수**: {result.get('quality_score', 0):.1%}")
-                        st.write(f"**처리 시간**: {result.get('total_time', 0):.1f}초")
-                        
-                        if result.get('success'):
-                            st.text_area(
-                                "문서 내용",
-                                value=result.get('final_document', ''),
-                                height=200,
-                                label_visibility="collapsed"
-                            )
+                    if result.get('success'):
+                        with st.expander(
+                            f"📄 문서 #{idx} | "
+                            f"{timestamp.strftime('%Y-%m-%d %H:%M')} | "
+                            f"{result.get('provider', 'Unknown')} | "
+                            f"품질: {result.get('quality_score', 0):.1%}"
+                        ):
+                            col1, col2 = st.columns([1, 2])
+                            
+                            with col1:
+                                st.markdown("**📋 요청 정보**")
+                                st.write(f"문서 유형: {item['input']['document_type']}")
+                                st.write(f"톤: {item['input']['tone']}")
+                                st.write(f"모델: {result.get('model_used', '-')}")
+                                st.write(f"품질: {result.get('quality_score', 0):.1%}")
+                                st.write(f"시간: {result.get('total_time', 0):.1f}초")
+                            
+                            with col2:
+                                st.markdown("**📄 생성된 문서**")
+                                st.text_area(
+                                    "문서 내용",
+                                    value=result.get('final_document', ''),
+                                    height=200,
+                                    label_visibility="collapsed",
+                                    key=f"history_{idx}"
+                                )
+                                
+                                st.download_button(
+                                    label="📥 다운로드",
+                                    data=result.get('final_document', ''),
+                                    file_name=f"history_{idx}_{timestamp.strftime('%Y%m%d_%H%M%S')}.txt",
+                                    mime="text/plain",
+                                    key=f"download_{idx}"
+                                )
             else:
-                st.info("아직 생성된 문서가 없습니다.")
+                st.info("아직 생성된 문서가 없습니다. 문서를 생성하면 여기에 이력이 표시됩니다.")
 
 
 def main():
