@@ -425,8 +425,8 @@ class MultiModelFinancialWritingApp:
                 st.metric("🏆 주 사용 모델", "-", None)
             st.markdown('</div>', unsafe_allow_html=True)
     
-    def process_document(self, input_data: Dict[str, Any], is_refinement: bool = False) -> Dict[str, Any]:
-        """Process document through the pipeline"""
+    def process_document(self, input_data: Dict[str, Any], is_refinement: bool = False, use_loop_agent: bool = True) -> Dict[str, Any]:
+        """Process document through the pipeline with optional LoopAgent"""
         try:
             # Initialize multi-model agent if not already done
             if not self.multi_model_agent:
@@ -463,39 +463,111 @@ class MultiModelFinancialWritingApp:
                         status_placeholder.info("🔍 품질 검증 중...")
                     time.sleep(0.1)
             
-            # Create prompt for document generation
-            prompt = self._create_prompt(input_data)
-            
-            # Generate response
-            response = self.multi_model_agent.generate(
-                prompt,
-                provider=provider,
-                temperature=input_data.get('temperature', 0.7),
-                max_tokens=input_data.get('max_tokens', 2048)
-            )
-            
-            # Save draft if first generation
-            if not is_refinement and not st.session_state.draft_document:
-                st.session_state.draft_document = response.content
-                st.session_state.refinement_history = [{
-                    'version': '초안',
-                    'content': response.content,
-                    'timestamp': datetime.now().isoformat(),
-                    'model': f"{provider} - {response.model_used}"
-                }]
+            # Check if we should use LoopAgent for iterative improvement
+            if use_loop_agent and not is_refinement:
+                # Use LoopAgent for comprehensive critique and refinement
+                status_placeholder.info("🔄 ADK LoopAgent로 문서를 반복적으로 개선하는 중...")
+                
+                # Prepare config for LoopAgent
+                loop_config = config.get_agent_config()
+                loop_config['provider'] = provider
+                loop_config['model'] = model
+                
+                # Create and run LoopAgent
+                from src.agents.loop_agent import LoopAgent
+                loop_agent = LoopAgent(loop_config)
+                
+                # Run the loop agent with comprehensive improvement
+                loop_result = loop_agent.run({
+                    "document_type": input_data.get('document_type'),
+                    "context": input_data.get('requirements'),
+                    "tone": input_data.get('tone'),
+                    "recipient": input_data.get('recipient', ''),
+                    "subject": input_data.get('subject', ''),
+                    "additional_context": input_data.get('additional_context', ''),
+                    "provider": provider,
+                    "model": model
+                })
+                
+                # Extract results
+                final_doc = loop_result.get('final_document', '')
+                quality_score = loop_result.get('quality_score', 0.0)
+                iterations = loop_result.get('iterations', 1)
+                
+                # Save draft from first iteration
+                if loop_result.get('history') and len(loop_result['history']) > 0:
+                    first_iteration = loop_result['history'][0].get('result', {})
+                    draft_doc = first_iteration.get('draft', final_doc)
+                    st.session_state.draft_document = draft_doc
+                    st.session_state.refinement_history = [{
+                        'version': '초안',
+                        'content': draft_doc,
+                        'timestamp': datetime.now().isoformat(),
+                        'model': f"{provider} - {model}"
+                    }]
+                    
+                    # Add refinement history from loop iterations
+                    for i, hist in enumerate(loop_result['history'][1:], 1):
+                        refined_content = hist.get('result', {}).get('refined_content', '')
+                        if refined_content:
+                            st.session_state.refinement_history.append({
+                                'version': f'개선 {i}',
+                                'content': refined_content,
+                                'timestamp': hist.get('timestamp', datetime.now().isoformat()),
+                                'model': f"{provider} - {model}",
+                                'quality_score': hist.get('result', {}).get('quality_score', 0)
+                            })
+                
+                # Update status
+                status_placeholder.success(
+                    f"✅ LoopAgent 완료! "
+                    f"총 {iterations}회 반복, "
+                    f"품질 점수: {quality_score:.2f}, "
+                    f"종료 사유: {loop_result.get('exit_reason', 'Unknown')}"
+                )
+                
+            else:
+                # Simple generation without LoopAgent
+                prompt = self._create_prompt(input_data)
+                
+                # Generate response
+                response = self.multi_model_agent.generate(
+                    prompt,
+                    provider=provider,
+                    temperature=input_data.get('temperature', 0.7),
+                    max_tokens=input_data.get('max_tokens', 2048)
+                )
+                
+                final_doc = response.content
+                
+                # Save draft if first generation
+                if not is_refinement and not st.session_state.draft_document:
+                    st.session_state.draft_document = response.content
+                    st.session_state.refinement_history = [{
+                        'version': '초안',
+                        'content': response.content,
+                        'timestamp': datetime.now().isoformat(),
+                        'model': f"{provider} - {response.model_used}"
+                    }]
+                
+                # Calculate quality score for simple generation
+                term_validation = validate_financial_terms(final_doc)
+                compliance_check = check_compliance(final_doc, input_data.get("document_type", "email"))
+                quality_score = calculate_quality_score(final_doc, term_validation, compliance_check)
+                iterations = 1
             
             # Clear progress
             progress_placeholder.empty()
             status_placeholder.empty()
             
-            # Validation
-            final_doc = response.content
+            # Final validation (for all paths)
             term_validation = validate_financial_terms(final_doc)
             compliance_check = check_compliance(final_doc, input_data.get("document_type", "email"))
-            final_score = calculate_quality_score(final_doc, term_validation, compliance_check)
+            final_score = quality_score if use_loop_agent and not is_refinement else calculate_quality_score(final_doc, term_validation, compliance_check)
             
             # Update model usage stats
-            model_key = f"{provider} - {response.model_used}"
+            model_used = model if use_loop_agent and not is_refinement else response.model_used if 'response' in locals() else model
+            model_key = f"{provider} - {model_used}"
             if model_key not in st.session_state.stats['models_used']:
                 st.session_state.stats['models_used'][model_key] = 0
             st.session_state.stats['models_used'][model_key] += 1
@@ -504,10 +576,10 @@ class MultiModelFinancialWritingApp:
                 "success": True,
                 "final_document": final_doc,
                 "quality_score": final_score,
-                "iterations": 1,
+                "iterations": iterations if 'iterations' in locals() else 1,
                 "total_time": 5.0,
                 "provider": provider,
-                "model_used": response.model_used,
+                "model_used": model_used,
                 "validation": {
                     "terms": term_validation,
                     "compliance": compliance_check,
@@ -699,6 +771,13 @@ class MultiModelFinancialWritingApp:
                         height=100
                     )
                 
+                # LoopAgent 사용 옵션
+                use_loop = st.checkbox(
+                    "🔄 ADK LoopAgent로 비평 및 개선 수행",
+                    value=True,
+                    help="체크하면 문서를 여러 번 비평하고 개선하여 품질을 높입니다."
+                )
+                
                 col1_1, col1_2 = st.columns(2)
                 with col1_1:
                     if st.button("🚀 문서 생성", type="primary", use_container_width=True):
@@ -717,7 +796,7 @@ class MultiModelFinancialWritingApp:
                                     "max_tokens": max_tokens
                                 }
                                 
-                                result = self.process_document(input_data)
+                                result = self.process_document(input_data, use_loop_agent=use_loop)
                                 
                                 st.session_state.current_result = result
                                 st.session_state.history.append({

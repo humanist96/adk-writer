@@ -135,7 +135,6 @@ class ModelFactory:
         "Anthropic": {
             "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet (최신/최고 성능)",
             "claude-3-5-haiku-20241022": "Claude 3.5 Haiku (빠른 응답)",
-            "claude-3-opus-20240229": "Claude 3 Opus (이전 최고 성능)",
             "claude-3-sonnet-20240229": "Claude 3 Sonnet (균형)",
             "claude-3-haiku-20240307": "Claude 3 Haiku (경제적)"
         },
@@ -204,7 +203,7 @@ class MultiModelAgent:
         if self.config.get('anthropic_api_key'):
             self.clients['Anthropic'] = AnthropicClient(
                 self.config['anthropic_api_key'],
-                self.config.get('anthropic_model', 'claude-3-opus-20240229')
+                self.config.get('anthropic_model', 'claude-3-5-sonnet-20241022')
             )
         
         # OpenAI
