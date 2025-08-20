@@ -19,7 +19,7 @@ class Config:
         
         # Anthropic Configuration
         ANTHROPIC_API_KEY = st.secrets.get("anthropic", {}).get("api_key", "")
-        ANTHROPIC_MODEL = st.secrets.get("anthropic", {}).get("model", "claude-3-opus-20240229")
+        ANTHROPIC_MODEL = st.secrets.get("anthropic", {}).get("model", "claude-3-5-sonnet-20241022")
         
         # OpenAI Configuration
         OPENAI_API_KEY = st.secrets.get("openai", {}).get("api_key", "")
@@ -47,7 +47,7 @@ class Config:
         GOOGLE_LOCATION = os.getenv("GOOGLE_LOCATION", "us-central1")
         
         ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-        ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-opus-20240229")
+        ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
         
         OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
         OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")

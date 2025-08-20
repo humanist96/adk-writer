@@ -264,6 +264,10 @@ class MultiModelFinancialWritingApp:
             st.session_state.selected_provider = config.DEFAULT_PROVIDER
         if 'selected_model' not in st.session_state:
             st.session_state.selected_model = config.ANTHROPIC_MODEL if config.DEFAULT_PROVIDER == "Anthropic" else None
+        if 'draft_document' not in st.session_state:
+            st.session_state.draft_document = None
+        if 'refinement_history' not in st.session_state:
+            st.session_state.refinement_history = []
     
     def render_header(self):
         """Render animated header"""
@@ -421,7 +425,7 @@ class MultiModelFinancialWritingApp:
                 st.metric("🏆 주 사용 모델", "-", None)
             st.markdown('</div>', unsafe_allow_html=True)
     
-    def process_document(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+    def process_document(self, input_data: Dict[str, Any], is_refinement: bool = False) -> Dict[str, Any]:
         """Process document through the pipeline"""
         try:
             # Initialize multi-model agent if not already done
@@ -469,6 +473,16 @@ class MultiModelFinancialWritingApp:
                 temperature=input_data.get('temperature', 0.7),
                 max_tokens=input_data.get('max_tokens', 2048)
             )
+            
+            # Save draft if first generation
+            if not is_refinement and not st.session_state.draft_document:
+                st.session_state.draft_document = response.content
+                st.session_state.refinement_history = [{
+                    'version': '초안',
+                    'content': response.content,
+                    'timestamp': datetime.now().isoformat(),
+                    'model': f"{provider} - {response.model_used}"
+                }]
             
             # Clear progress
             progress_placeholder.empty()
@@ -655,8 +669,9 @@ class MultiModelFinancialWritingApp:
         st.markdown("---")
         
         # Tabs for different features
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "✍️ 문서 작성",
+            "🔄 초안 vs 최종",
             "🔍 모델 비교",
             "📊 분석",
             "📚 이력"
@@ -798,6 +813,103 @@ class MultiModelFinancialWritingApp:
                         st.info(st.session_state.example_text)
         
         with tab2:
+            st.markdown("### 🔄 초안 vs 최종 문서 비교")
+            
+            if st.session_state.draft_document and st.session_state.current_result:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("#### 📝 초안")
+                    st.text_area(
+                        "초안 문서",
+                        value=st.session_state.draft_document,
+                        height=400,
+                        label_visibility="collapsed",
+                        key="draft_compare"
+                    )
+                    
+                    # Draft metrics
+                    draft_terms = validate_financial_terms(st.session_state.draft_document)
+                    draft_compliance = check_compliance(st.session_state.draft_document, "email")
+                    draft_score = calculate_quality_score(st.session_state.draft_document, draft_terms, draft_compliance)
+                    
+                    st.metric("초안 품질", f"{draft_score:.1%}")
+                    st.metric("초안 길이", f"{len(st.session_state.draft_document):,}자")
+                
+                with col2:
+                    st.markdown("#### ✨ 최종 문서")
+                    final_doc = st.session_state.current_result.get('final_document', '')
+                    st.text_area(
+                        "최종 문서",
+                        value=final_doc,
+                        height=400,
+                        label_visibility="collapsed",
+                        key="final_compare"
+                    )
+                    
+                    # Final metrics
+                    final_score = st.session_state.current_result.get('quality_score', 0)
+                    st.metric("최종 품질", f"{final_score:.1%}")
+                    st.metric("최종 길이", f"{len(final_doc):,}자")
+                
+                # Improvement analysis
+                st.markdown("#### 📈 개선 분석")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    improvement = (final_score - draft_score) * 100
+                    if improvement > 0:
+                        st.success(f"품질 개선: +{improvement:.1f}%")
+                    elif improvement < 0:
+                        st.error(f"품질 하락: {improvement:.1f}%")
+                    else:
+                        st.info("품질 동일")
+                
+                with col2:
+                    length_change = len(final_doc) - len(st.session_state.draft_document)
+                    if length_change > 0:
+                        st.info(f"길이 증가: +{length_change:,}자")
+                    elif length_change < 0:
+                        st.info(f"길이 감소: {length_change:,}자")
+                    else:
+                        st.info("길이 동일")
+                
+                with col3:
+                    if st.button("♻️ 문서 재정제", use_container_width=True):
+                        # Refine document again
+                        refinement_prompt = f"다음 문서를 더 개선해주세요:\n\n{final_doc}"
+                        input_data = st.session_state.current_result.get('input', {})
+                        input_data['requirements'] = refinement_prompt
+                        
+                        with st.spinner("문서를 재정제하는 중..."):
+                            refined_result = self.process_document(input_data, is_refinement=True)
+                            if refined_result.get('success'):
+                                st.session_state.current_result = refined_result
+                                st.session_state.refinement_history.append({
+                                    'version': f"정제 {len(st.session_state.refinement_history)}",
+                                    'content': refined_result.get('final_document', ''),
+                                    'timestamp': datetime.now().isoformat(),
+                                    'model': f"{refined_result.get('provider')} - {refined_result.get('model_used')}"
+                                })
+                                st.success("문서가 재정제되었습니다!")
+                                st.rerun()
+                
+                # Refinement history
+                if len(st.session_state.refinement_history) > 1:
+                    st.markdown("#### 📚 정제 이력")
+                    for idx, version in enumerate(st.session_state.refinement_history):
+                        with st.expander(f"{version['version']} - {version['model']}"):
+                            st.text_area(
+                                f"버전 {idx}",
+                                value=version['content'][:500] + "...",
+                                height=150,
+                                label_visibility="collapsed",
+                                key=f"version_{idx}"
+                            )
+            else:
+                st.info("먼저 문서를 생성해주세요. 문서 작성 탭에서 요구사항을 입력하고 생성 버튼을 클릭하세요.")
+        
+        with tab3:
             st.markdown("### 🔍 여러 모델 비교")
             st.info("동일한 요구사항으로 여러 AI 모델의 결과를 비교해보세요.")
             
@@ -898,7 +1010,7 @@ class MultiModelFinancialWritingApp:
                     if not compare_models:
                         st.warning("비교할 모델을 선택해주세요.")
         
-        with tab3:
+        with tab4:
             if st.session_state.current_result and st.session_state.current_result.get("success"):
                 result = st.session_state.current_result
                 
@@ -963,7 +1075,7 @@ class MultiModelFinancialWritingApp:
             else:
                 st.info("먼저 문서를 생성해주세요.")
         
-        with tab4:
+        with tab5:
             if st.session_state.history:
                 st.markdown("### 📚 문서 생성 이력")
                 

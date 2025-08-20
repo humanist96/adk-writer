@@ -29,7 +29,7 @@ class BaseModelClient(ABC):
 class AnthropicClient(BaseModelClient):
     """Anthropic Claude client"""
     
-    def __init__(self, api_key: str, model: str = "claude-3-opus-20240229"):
+    def __init__(self, api_key: str, model: str = "claude-3-5-sonnet-20241022"):
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model
     
@@ -133,10 +133,11 @@ class ModelFactory:
     
     MODELS = {
         "Anthropic": {
-            "claude-3-opus-20240229": "Claude 3 Opus (최고 성능)",
+            "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet (최신/최고 성능)",
+            "claude-3-5-haiku-20241022": "Claude 3.5 Haiku (빠른 응답)",
+            "claude-3-opus-20240229": "Claude 3 Opus (이전 최고 성능)",
             "claude-3-sonnet-20240229": "Claude 3 Sonnet (균형)",
-            "claude-3-haiku-20240307": "Claude 3 Haiku (빠른 응답)",
-            "claude-2.1": "Claude 2.1 (이전 버전)"
+            "claude-3-haiku-20240307": "Claude 3 Haiku (경제적)"
         },
         "OpenAI": {
             "gpt-4-turbo-preview": "GPT-4 Turbo (최신)",
