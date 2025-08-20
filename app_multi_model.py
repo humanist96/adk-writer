@@ -255,6 +255,7 @@ class MultiModelFinancialWritingApp:
         self.config = config
         self.multi_model_agent = None
         self.db = get_db_manager()  # Initialize database manager
+        self.example_templates = ExampleTemplates()  # Initialize example templates
         self._initialize_session_state()
         self._load_statistics_from_db()
     
@@ -828,23 +829,21 @@ class MultiModelFinancialWritingApp:
                 )
                 
                 if st.button("🎯 고급 프롬프트 적용", use_container_width=True):
-                    if requirements:
-                        # Create enhanced prompt with Context7 and Sequential
-                        from src.utils.example_templates import ExampleTemplates
-                        et = ExampleTemplates()
-                        
+                    # Get current requirements from session state if available
+                    current_requirements = st.session_state.get('requirements_input', '')
+                    if current_requirements:
                         # Build a temporary example from current inputs
                         temp_example = {
                             'title': doc_type,
-                            'requirements': requirements,
-                            'recipient': recipient,
-                            'subject': subject,
-                            'additional_context': additional_context,
+                            'requirements': current_requirements,
+                            'recipient': st.session_state.get('recipient_input', ''),
+                            'subject': st.session_state.get('subject_input', ''),
+                            'additional_context': st.session_state.get('context_input', ''),
                             'tone': tone,
                             'length': doc_length
                         }
                         
-                        enhanced_prompt = et.generate_advanced_prompt(
+                        enhanced_prompt = self.example_templates.generate_advanced_prompt(
                             temp_example,
                             use_context7=use_context7,
                             use_sequential=use_sequential,
@@ -854,6 +853,8 @@ class MultiModelFinancialWritingApp:
                         st.session_state.example_requirements = enhanced_prompt
                         st.success("✨ 고급 프롬프트가 적용되었습니다!")
                         st.rerun()
+                    else:
+                        st.warning("먼저 요구사항을 입력해주세요.")
             
             st.markdown("---")
             
