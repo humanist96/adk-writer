@@ -1,5 +1,6 @@
 """
 Streamlit Cloud Deployment Version - AI Financial Writer Pro
+Multi-Model Support: Anthropic Claude, OpenAI GPT, Google Gemini
 """
 
 import streamlit as st
@@ -15,7 +16,18 @@ try:
 except:
     from src.config import config
 
-from src.agents.loop_agent import LoopAgent
+# Check if multi-model support is available
+try:
+    from src.agents.multi_model_agents import (
+        ModelFactory,
+        MultiModelAgent,
+        MultiModelAgentResponse
+    )
+    MULTI_MODEL_SUPPORT = True
+except ImportError:
+    MULTI_MODEL_SUPPORT = False
+    from src.agents.loop_agent import LoopAgent
+
 from src.tools.custom_tools import (
     validate_financial_terms,
     check_compliance,
