@@ -14,7 +14,7 @@
 - [x] Documentation updated
 
 ### 📱 Application URLs
-- **Production**: https://adk-writer.streamlit.app/
+- **Production**: https://write-multi-agent.streamlit.app/
 - **GitHub**: https://github.com/humanist96/adk-writer
 
 ### 🔑 Required Secrets (Set in Streamlit Cloud)

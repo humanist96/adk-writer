@@ -17,7 +17,10 @@
       "WebFetch(domain:localhost)",
       "Bash(git pull:*)",
       "Bash(start test_ui_component.html)",
-      "WebSearch"
+      "WebSearch",
+      "WebFetch(domain:share.streamlit.io)",
+      "WebFetch(domain:adk-writer.streamlit.app)",
+      "Bash(gh repo view:*)"
     ],
     "deny": [],
     "ask": []
