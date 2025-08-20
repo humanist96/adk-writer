@@ -7,6 +7,10 @@ from dataclasses import dataclass, field
 import json
 import google.generativeai as genai
 from loguru import logger
+try:
+    from .multi_model_agents import MultiModelAgent
+except ImportError:
+    MultiModelAgent = None
 
 @dataclass
 class AgentResponse:
@@ -36,22 +40,43 @@ class BaseLlmAgent:
         self._setup_model()
         
     def _setup_model(self):
-        """Initialize the Google Generative AI model"""
-        genai.configure(api_key=self.model_config.get("api_key"))
-        self.model = genai.GenerativeModel(
-            model_name=self.model_config.get("model", "gemini-1.5-pro"),
-            generation_config={
-                "temperature": self.model_config.get("temperature", 0.7),
-                "max_output_tokens": self.model_config.get("max_output_tokens", 2048),
-            }
-        )
-        logger.info(f"Initialized {self.name} with model {self.model_config.get('model')}")
+        """Initialize the AI model (multi-model or Google Gemini)"""
+        # Check if we should use multi-model support
+        provider = self.model_config.get("provider")
+        if provider and MultiModelAgent:
+            # Use multi-model agent for Anthropic/OpenAI
+            self.multi_model_agent = MultiModelAgent(self.model_config)
+            self.model = None
+            logger.info(f"Initialized {self.name} with multi-model support ({provider})")
+        else:
+            # Use Google Gemini by default
+            genai.configure(api_key=self.model_config.get("api_key"))
+            model_name = self.model_config.get("model", "gemini-1.5-flash")
+            # Ensure we use Gemini models only for Google API
+            if model_name.startswith("claude") or model_name.startswith("gpt"):
+                model_name = "gemini-1.5-flash"
+            self.model = genai.GenerativeModel(
+                model_name=model_name,
+                generation_config={
+                    "temperature": self.model_config.get("temperature", 0.7),
+                    "max_output_tokens": self.model_config.get("max_output_tokens", 2048),
+                }
+            )
+            self.multi_model_agent = None
+            logger.info(f"Initialized {self.name} with model {model_name}")
     
     def generate(self, prompt: str, context: Optional[Dict[str, Any]] = None) -> str:
         """Generate response using the LLM"""
         try:
-            response = self.model.generate_content(prompt)
-            return response.text
+            if self.multi_model_agent:
+                # Use multi-model agent
+                provider = self.model_config.get("provider", "Google")
+                response = self.multi_model_agent.generate(prompt, provider=provider)
+                return response.content
+            else:
+                # Use Google Gemini
+                response = self.model.generate_content(prompt)
+                return response.text
         except Exception as e:
             logger.error(f"Error in {self.name}: {str(e)}")
             raise
