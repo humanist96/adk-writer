@@ -334,15 +334,40 @@ class EnhancedDraftWriterAgent(BaseLlmAgent):
         return enhanced_draft
     
     def _prepare_search_summary(self, relevant_info: List[Dict[str, Any]]) -> str:
-        """Prepare summary of search results with emphasis on recent information"""
+        """Prepare summary of search results with emphasis on recent information and quality"""
         if not relevant_info:
             return "검색 결과 없음"
         
-        summary_lines = []
-        summary_lines.append(f"🔍 총 {len(relevant_info)}개의 최신 정보를 발견했습니다.\n")
+        # Filter out low-quality results if quality metrics exist
+        high_quality_info = []
+        for info in relevant_info:
+            if 'quality_metrics' in info:
+                # Only include high and medium confidence results
+                if info['quality_metrics']['confidence'] in ['high', 'medium']:
+                    high_quality_info.append(info)
+                else:
+                    logger.info(f"Excluding low confidence result: {info['title']}")
+            else:
+                # Include if no quality metrics (backward compatibility)
+                high_quality_info.append(info)
         
-        for idx, info in enumerate(relevant_info[:5], 1):  # Show top 5
+        if not high_quality_info:
+            return "검색 결과가 품질 기준을 충족하지 못했습니다."
+        
+        summary_lines = []
+        summary_lines.append(f"🔍 총 {len(high_quality_info)}개의 고품질 최신 정보를 발견했습니다.\n")
+        
+        for idx, info in enumerate(high_quality_info[:5], 1):  # Show top 5
             summary_lines.append(f"{idx}. {info['title']}")
+            
+            # Add quality indicators if available
+            if 'quality_metrics' in info:
+                quality = info['quality_metrics']
+                confidence = quality['confidence']
+                score = quality['overall_score']
+                summary_lines.append(f"   ⭐ 신뢰도: {confidence.upper()} (점수: {score:.2f})")
+                if quality.get('reasons'):
+                    summary_lines.append(f"   📊 평가: {', '.join(quality['reasons'][:2])}")
             
             # Add date if available
             if info.get('content_date'):

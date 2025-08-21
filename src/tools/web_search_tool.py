@@ -14,6 +14,12 @@ from urllib.parse import quote_plus, urlparse
 from bs4 import BeautifulSoup
 from loguru import logger
 import hashlib
+from .advanced_search import (
+    AdvancedSearchEvaluator,
+    EnhancedSearchQueryGenerator,
+    SearchQuality,
+    filter_reliable_results
+)
 
 
 @dataclass
@@ -368,6 +374,8 @@ class WebSearchEnricher:
     def __init__(self, provider: Optional[WebSearchProvider] = None):
         self.provider = provider or FallbackSearchProvider()
         self.enrichment_cache = {}
+        self.search_evaluator = AdvancedSearchEvaluator()
+        self.query_generator = EnhancedSearchQueryGenerator()
         
     def enrich_document(self, 
                         document: str, 
@@ -391,9 +399,23 @@ class WebSearchEnricher:
         # Extract key terms from document
         key_terms = self._extract_key_terms(document, title)
         
-        # Generate search queries with Korean priority
-        korean_priority = search_config.get('korean_priority', True) if search_config else True
-        queries = self._generate_search_queries(key_terms, document_type, title, korean_priority)
+        # Generate advanced search queries with priority scoring
+        query_context = {
+            'document_type': document_type,
+            'key_terms': key_terms,
+            'title': title
+        }
+        advanced_queries = self.query_generator.generate_advanced_queries(
+            document, title, document_type, query_context
+        )
+        
+        # Fall back to basic queries if advanced generation fails
+        if not advanced_queries:
+            korean_priority = search_config.get('korean_priority', True) if search_config else True
+            queries = self._generate_search_queries(key_terms, document_type, title, korean_priority)
+        else:
+            # Extract query strings from tuples (query, priority)
+            queries = [query for query, priority in advanced_queries]
         
         # Determine number of queries based on search depth
         max_queries_map = {
@@ -559,7 +581,7 @@ class WebSearchEnricher:
     def _process_search_results(self, 
                                results: List[SearchResult], 
                                document: str) -> List[Dict[str, Any]]:
-        """Process and rank search results by relevance with enhanced URL and date tracking"""
+        """Process and rank search results by relevance with quality evaluation"""
         relevant_info = []
         seen_urls = set()  # Track unique URLs
         
@@ -569,16 +591,27 @@ class WebSearchEnricher:
                 continue
             seen_urls.add(result.url)
             
-            # Calculate relevance score
+            # Calculate basic relevance score
             relevance = self._calculate_relevance(result, document)
             result.relevance_score = relevance
             
-            # For demo/fallback results, ensure minimum relevance score
-            if hasattr(result, 'source') and result.source in ['Demo', 'Fallback']:
-                relevance = max(relevance, 0.5)  # Ensure demo results are included
-                result.relevance_score = relevance
+            # Evaluate search quality
+            search_context = {
+                'query': getattr(result, 'query', ''),
+                'document': document[:500],  # Use first 500 chars for context
+                'required_terms': self._extract_key_terms(document, '')[:5]
+            }
             
-            if relevance > 0.1:  # Much lower threshold to ensure results are included
+            result_dict = result.to_dict()
+            quality = self.search_evaluator.evaluate_search_quality(result_dict, search_context)
+            
+            # For demo/fallback results, ensure minimum quality score
+            if hasattr(result, 'source') and result.source in ['Demo', 'Fallback']:
+                quality.overall_score = max(quality.overall_score, 0.4)
+                quality.is_reliable = quality.overall_score >= 0.4
+            
+            # Only include reliable results
+            if quality.is_reliable and quality.overall_score >= 0.4:
                 # Ensure URL is complete
                 url = result.url
                 if not url.startswith('http'):
@@ -595,7 +628,16 @@ class WebSearchEnricher:
                     'source': result.source if hasattr(result, 'source') else 'Web',
                     'retrieved_at': datetime.now().isoformat(),
                     'is_recent': True,  # Marked as recent due to time filtering
-                    'content_date': result.content_date if hasattr(result, 'content_date') and result.content_date else None
+                    'content_date': result.content_date if hasattr(result, 'content_date') and result.content_date else None,
+                    'quality_metrics': {
+                        'overall_score': quality.overall_score,
+                        'relevance': quality.relevance_score,
+                        'credibility': quality.credibility_score,
+                        'freshness': quality.freshness_score,
+                        'specificity': quality.specificity_score,
+                        'confidence': quality.confidence_level,
+                        'reasons': quality.quality_reasons
+                    }
                 }
                 
                 # Try to extract date from snippet
@@ -614,9 +656,15 @@ class WebSearchEnricher:
                         break
                 
                 relevant_info.append(info)
+            else:
+                logger.info(f"Filtered out low-quality result: {result.title} (score: {quality.overall_score:.2f})")
         
-        # Sort by relevance but prioritize recent content
-        relevant_info.sort(key=lambda x: (x.get('content_date') is not None, x['relevance']), reverse=True)
+        # Sort by quality score first, then by relevance
+        relevant_info.sort(key=lambda x: (
+            x['quality_metrics']['overall_score'],
+            x.get('content_date') is not None,
+            x['relevance']
+        ), reverse=True)
         
         logger.info(f"Processed {len(relevant_info)} relevant results from {len(results)} total results")
         return relevant_info[:10]  # Return top 10 most relevant
