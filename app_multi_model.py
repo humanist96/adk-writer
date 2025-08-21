@@ -36,6 +36,10 @@ from src.tools.custom_tools import (
     check_compliance,
     calculate_quality_score
 )
+from src.tools.web_search_tool import (
+    create_web_search_enricher,
+    enrich_document_with_search
+)
 from src.utils.diff_utils import (
     create_diff_html,
     create_word_diff,
@@ -505,6 +509,13 @@ class MultiModelFinancialWritingApp:
                 loop_config['provider'] = provider
                 loop_config['model'] = model
                 
+                # Add web search configuration if enabled
+                if input_data.get('enable_web_search'):
+                    loop_config['enable_web_search'] = True
+                    loop_config['search_provider'] = input_data.get('search_provider', 'fallback')
+                    loop_config['search_api_key'] = input_data.get('search_api_key')
+                    loop_config['google_search_engine_id'] = input_data.get('google_search_engine_id')
+                
                 # Also set provider-specific model keys
                 if provider == "Anthropic":
                     loop_config['anthropic_model'] = model
@@ -518,16 +529,23 @@ class MultiModelFinancialWritingApp:
                 loop_agent = LoopAgent(loop_config)
                 
                 # Run the loop agent with comprehensive improvement
-                loop_result = loop_agent.run({
+                loop_input = {
                     "document_type": input_data.get('document_type'),
-                    "context": input_data.get('requirements'),
+                    "requirements": input_data.get('requirements'),  # Changed from 'context' to 'requirements'
                     "tone": input_data.get('tone'),
                     "recipient": input_data.get('recipient', ''),
                     "subject": input_data.get('subject', ''),
                     "additional_context": input_data.get('additional_context', ''),
                     "provider": provider,
                     "model": model
-                })
+                }
+                
+                # Add web search configuration to loop input
+                if input_data.get('enable_web_search'):
+                    loop_input['enable_web_search'] = True
+                    loop_input['search_config'] = input_data.get('search_config', {})
+                
+                loop_result = loop_agent.run(loop_input)
                 
                 # Extract results
                 final_doc = loop_result.get('final_document', '')
@@ -627,6 +645,7 @@ class MultiModelFinancialWritingApp:
                 st.session_state.stats['models_used'][model_key] = 0
             st.session_state.stats['models_used'][model_key] += 1
             
+            # Prepare result
             result = {
                 "success": True,
                 "final_document": final_doc,
@@ -641,6 +660,26 @@ class MultiModelFinancialWritingApp:
                     "final_score": final_score
                 }
             }
+            
+            # Add web search results if available
+            if use_loop_agent and loop_result:
+                # Debug logging
+                logger.info(f"Loop result keys: {loop_result.keys()}")
+                
+                if loop_result.get('web_search_results'):
+                    web_results = loop_result.get('web_search_results', {})
+                    logger.info(f"Web search results found: {len(web_results.get('relevant_information', []))} relevant items")
+                    
+                    result['web_search_sources'] = web_results.get('relevant_information', [])
+                    result['search_metadata'] = {
+                        'query_count': len(web_results.get('search_queries', [])),
+                        'total_results': len(web_results.get('search_results', [])),
+                        'used_sources': len(web_results.get('relevant_information', [])),
+                        'search_queries': web_results.get('search_queries', [])
+                    }
+                    logger.info(f"Added {len(result['web_search_sources'])} sources to result")
+                else:
+                    logger.warning("No web_search_results in loop_result")
             
             # Update stats
             self._update_stats(result)
@@ -825,6 +864,84 @@ class MultiModelFinancialWritingApp:
                 help="생성할 문서의 길이를 선택하세요"
             )
             
+            # Web Search Settings
+            with st.expander("🔍 웹 검색 설정", expanded=False):
+                enable_web_search = st.checkbox(
+                    "웹 검색 활성화",
+                    value=False,
+                    help="문서 제목을 기반으로 웹 검색을 수행하여 최신 정보를 문서에 반영합니다."
+                )
+                
+                if enable_web_search:
+                    search_depth = st.select_slider(
+                        "검색 깊이",
+                        options=["quick", "standard", "deep", "comprehensive"],
+                        value="deep",
+                        format_func=lambda x: {
+                            "quick": "빠른 검색 (3-5개 결과)",
+                            "standard": "표준 검색 (5-10개 결과)", 
+                            "deep": "심층 검색 (10-15개 결과)",
+                            "comprehensive": "종합 검색 (15-20개 결과)"
+                        }.get(x, x)
+                    )
+                    
+                    extract_content = st.checkbox(
+                        "웹 페이지 전체 내용 추출",
+                        value=True,
+                        help="검색된 웹 페이지에서 전체 내용을 추출하여 더 풍부한 정보를 제공합니다."
+                    )
+                    
+                    show_sources = st.checkbox(
+                        "출처 표시",
+                        value=True,
+                        help="문서에 참고한 웹 페이지의 출처를 명시합니다."
+                    )
+                    
+                    search_provider = st.selectbox(
+                        "검색 엔진",
+                        options=["fallback", "google", "bing"],
+                        format_func=lambda x: {
+                            "fallback": "기본 검색 (API 키 불필요)",
+                            "google": "Google 검색 (API 키 필요)",
+                            "bing": "Bing 검색 (API 키 필요)"
+                        }.get(x, x)
+                    )
+                    
+                    if search_provider in ["google", "bing"]:
+                        search_api_key = st.text_input(
+                            f"{search_provider.title()} API 키",
+                            type="password",
+                            help=f"{search_provider.title()} Search API 키를 입력하세요."
+                        )
+                        
+                        if search_provider == "google":
+                            search_engine_id = st.text_input(
+                                "Google Search Engine ID",
+                                help="Google Custom Search Engine ID를 입력하세요."
+                            )
+                    
+                    # Additional search options
+                    search_timeframe = st.selectbox(
+                        "검색 기간",
+                        options=["all", "day", "week", "month", "year"],
+                        format_func=lambda x: {
+                            "all": "전체 기간",
+                            "day": "최근 24시간",
+                            "week": "최근 1주일",
+                            "month": "최근 1개월",
+                            "year": "최근 1년"
+                        }.get(x, x),
+                        index=2  # Default to "month"
+                    )
+                    
+                    include_korean_sources = st.checkbox(
+                        "한국 자료 우선",
+                        value=True,
+                        help="한국 금융시장 관련 자료를 우선적으로 검색합니다."
+                    )
+                    
+                    st.info("💡 웹 검색을 사용하면 최신 시장 동향, 통계, 뉴스를 자동으로 수집하여 문서를 더욱 풍부하게 만들 수 있습니다.")
+            
             # Advanced prompt settings
             with st.expander("🧪 고급 프롬프트 설정", expanded=False):
                 use_context7 = st.checkbox(
@@ -982,6 +1099,40 @@ class MultiModelFinancialWritingApp:
                                     "length_preference": doc_length
                                 }
                                 
+                                # Add web search configuration if enabled
+                                if enable_web_search:
+                                    input_data["enable_web_search"] = True
+                                    
+                                    # Map search depth to max_results
+                                    max_results_map = {
+                                        "quick": 5,
+                                        "standard": 10,
+                                        "deep": 15,
+                                        "comprehensive": 20
+                                    }
+                                    max_results_per_query = max_results_map.get(search_depth, 10)
+                                    
+                                    logger.info(f"Web search enabled: depth={search_depth}, max_results={max_results_per_query}")
+                                    
+                                    search_config = {
+                                        "max_results": max_results_per_query,
+                                        "search_depth": search_depth,
+                                        "extract_content": extract_content,
+                                        "show_sources": show_sources,
+                                        "time_range": search_timeframe if search_timeframe != "all" else "month",
+                                        "korean_priority": include_korean_sources
+                                    }
+                                    input_data["search_config"] = search_config
+                                    logger.info(f"Search config prepared: {search_config}")
+                                    
+                                    # Add search provider configuration
+                                    input_data["search_provider"] = search_provider
+                                    if search_provider != "fallback":
+                                        if 'search_api_key' in locals() and search_api_key:
+                                            input_data["search_api_key"] = search_api_key
+                                        if search_provider == "google" and 'search_engine_id' in locals():
+                                            input_data["google_search_engine_id"] = search_engine_id
+                                
                                 result = self.process_document(input_data, use_loop_agent=use_loop)
                                 
                                 st.session_state.current_result = result
@@ -1134,13 +1285,88 @@ class MultiModelFinancialWritingApp:
                         </div>
                         """, unsafe_allow_html=True)
                     
-                    # Document content
+                    # Document content with copy button
+                    final_document = result.get("final_document", "")
+                    
+                    # Copy button
+                    col_copy1, col_copy2 = st.columns([3, 1])
+                    with col_copy1:
+                        st.markdown("**📝 최종 문서**")
+                    with col_copy2:
+                        if st.button("📋 복사", key="copy_doc", help="문서를 클립보드에 복사합니다"):
+                            # Use pyperclip for clipboard operations
+                            try:
+                                import pyperclip
+                                pyperclip.copy(final_document)
+                                st.success("✅ 문서가 클립보드에 복사되었습니다!")
+                            except ImportError:
+                                # Fallback: Show in code block for easy copying
+                                st.info("아래 텍스트를 전체 선택(Ctrl+A) 후 복사(Ctrl+C)하세요")
+                            except Exception as e:
+                                st.error(f"복사 실패: {str(e)}")
+                    
+                    # Document text area
                     st.text_area(
                         "최종 문서",
-                        value=result.get("final_document", ""),
+                        value=final_document,
                         height=350,
-                        label_visibility="collapsed"
+                        label_visibility="collapsed",
+                        key="final_doc_area"
                     )
+                    
+                    # Display web search sources if available
+                    if result.get('web_search_sources'):
+                        with st.expander("📚 참고 자료 및 출처", expanded=True):
+                            st.markdown("#### 🔍 웹 검색 결과에서 참고한 자료:")
+                            
+                            sources = result.get('web_search_sources', [])
+                            for idx, source in enumerate(sources[:10], 1):  # Show top 10 sources
+                                col_src1, col_src2 = st.columns([3, 1])
+                                with col_src1:
+                                    # Display with full URL visibility
+                                    url = source.get('url', '#')
+                                    title = source.get('title', 'Unknown Title')
+                                    
+                                    # Show content date if available
+                                    date_info = ""
+                                    if source.get('content_date'):
+                                        date_info = f" 📅 {source['content_date']}"
+                                    elif source.get('retrieved_at'):
+                                        date_info = f" 📅 검색일: {source['retrieved_at'][:10]}"
+                                    
+                                    st.markdown(f"""
+                                    **{idx}. {title}**{date_info}
+                                    - 🔗 URL: [{url}]({url})
+                                    - 📝 {source.get('summary', 'No summary')[:200]}...
+                                    """)
+                                with col_src2:
+                                    relevance = source.get('relevance', 0)
+                                    relevance_color = "#00b894" if relevance > 0.7 else "#fdcb6e" if relevance > 0.4 else "#d63031"
+                                    st.markdown(f"""
+                                    <div style="text-align: center; padding: 0.5rem; background: {relevance_color}; 
+                                                color: white; border-radius: 10px;">
+                                        관련도: {relevance:.0%}
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                
+                                if source.get('key_facts'):
+                                    with st.container():
+                                        st.markdown("**핵심 정보:**")
+                                        for fact in source.get('key_facts', [])[:2]:
+                                            st.markdown(f"• {fact}")
+                            
+                            # Search metadata
+                            if result.get('search_metadata'):
+                                st.markdown("---")
+                                metadata = result.get('search_metadata', {})
+                                st.markdown("#### 📊 검색 통계")
+                                col_m1, col_m2, col_m3 = st.columns(3)
+                                with col_m1:
+                                    st.metric("검색 쿼리", metadata.get('query_count', 0))
+                                with col_m2:
+                                    st.metric("검색 결과", metadata.get('total_results', 0))
+                                with col_m3:
+                                    st.metric("활용 자료", metadata.get('used_sources', 0))
                     
                     # Metrics
                     col2_1, col2_2, col2_3 = st.columns(3)

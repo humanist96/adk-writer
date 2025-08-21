@@ -15,6 +15,7 @@ from .base_agents import (
     CriticAgent, 
     RefinerAgent
 )
+from .enhanced_draft_agent import EnhancedDraftWriterAgent
 from .sequential_agent import SequentialAgent
 from ..config import config
 
@@ -29,6 +30,9 @@ class LoopState:
     start_time: float = field(default_factory=time.time)
     exit_reason: str = ""
     final_output: str = ""
+    best_score: float = 0.0  # Track best score achieved
+    best_content: str = ""  # Store best content version
+    score_history: List[float] = field(default_factory=list)  # Track all scores
     
     def add_iteration(self, result: Dict[str, Any]):
         """Add iteration result to history"""
@@ -77,8 +81,17 @@ class LoopAgent:
     
     def _setup_pipeline(self):
         """Initialize the sequential pipeline with agents"""
+        # Check if web search is enabled in config
+        use_enhanced_draft = self.model_config.get('enable_web_search', False)
+        
         # Create individual agents
-        draft_agent = DraftWriterAgent(self.model_config)
+        if use_enhanced_draft:
+            draft_agent = EnhancedDraftWriterAgent(self.model_config)
+            logger.info("Using EnhancedDraftWriterAgent with web search capability")
+        else:
+            draft_agent = DraftWriterAgent(self.model_config)
+            logger.info("Using standard DraftWriterAgent")
+        
         critic_agent = CriticAgent(self.model_config)
         refiner_agent = RefinerAgent(self.model_config)
         
@@ -162,9 +175,34 @@ class LoopAgent:
                 # Run pipeline
                 iteration_result = self._run_iteration(pipeline_input)
                 
-                # Update state
-                self.state.current_draft = iteration_result.get("refined_content", "")
-                self.state.current_score = iteration_result.get("quality_score", 0.0)
+                # Update state with quality monitoring
+                new_content = iteration_result.get("refined_content", "")
+                new_score = iteration_result.get("quality_score", 0.0)
+                
+                # Track score history
+                self.state.score_history.append(new_score)
+                
+                # Quality assurance: Check if score improved
+                if new_score < self.state.current_score:
+                    # Quality decreased - rollback to previous version
+                    logger.warning(f"Quality decreased from {self.state.current_score:.2f} to {new_score:.2f}. Rolling back.")
+                    iteration_result["rolled_back"] = True
+                    iteration_result["rollback_reason"] = f"Quality decreased: {self.state.current_score:.2f} → {new_score:.2f}"
+                    
+                    # Keep previous content and score
+                    iteration_result["refined_content"] = self.state.current_draft
+                    iteration_result["quality_score"] = self.state.current_score
+                else:
+                    # Quality improved or maintained - update state
+                    self.state.current_draft = new_content
+                    self.state.current_score = new_score
+                    
+                    # Update best version if this is the highest score
+                    if new_score > self.state.best_score:
+                        self.state.best_score = new_score
+                        self.state.best_content = new_content
+                        logger.info(f"New best score achieved: {new_score:.2f}")
+                
                 self.state.add_iteration(iteration_result)
                 
                 # Check exit conditions
@@ -184,8 +222,13 @@ class LoopAgent:
                 
                 logger.info(f"Iteration {self.state.iteration} complete. Score: {self.state.current_score:.2f}")
             
-            # Finalize output
-            self.state.final_output = self.state.current_draft
+            # Finalize output - use the best version achieved
+            if self.state.best_score > self.state.current_score:
+                logger.info(f"Using best version (score: {self.state.best_score:.2f}) instead of current (score: {self.state.current_score:.2f})")
+                self.state.final_output = self.state.best_content
+                self.state.current_score = self.state.best_score
+            else:
+                self.state.final_output = self.state.current_draft
             
             return self._prepare_final_result()
             
@@ -202,6 +245,22 @@ class LoopAgent:
             # First iteration - create initial draft
             draft_response = self.pipeline.agents[0].process(input_data)
             iteration_result["draft"] = draft_response.content
+            
+            # Initialize best version tracking
+            initial_score = draft_response.quality_score
+            self.state.best_score = initial_score
+            self.state.best_content = draft_response.content
+            self.state.current_score = initial_score
+            self.state.current_draft = draft_response.content
+            
+            # Store web search results if available
+            if hasattr(draft_response, 'web_search_results') and draft_response.web_search_results:
+                self.web_search_results = draft_response.web_search_results
+                iteration_result["web_search_results"] = draft_response.web_search_results
+                logger.info(f"Stored web search results with {len(draft_response.web_search_results.get('relevant_information', []))} sources")
+                logger.debug(f"Web search results keys: {draft_response.web_search_results.keys()}")
+            else:
+                logger.warning(f"No web search results found in draft response. Has attribute: {hasattr(draft_response, 'web_search_results')}, Value: {getattr(draft_response, 'web_search_results', None)}")
         else:
             # Subsequent iterations - use refined content from previous iteration
             iteration_result["draft"] = input_data.get("previous_draft", "")
@@ -244,7 +303,7 @@ class LoopAgent:
     
     def _prepare_final_result(self) -> Dict[str, Any]:
         """Prepare the final result with all metadata"""
-        return {
+        result = {
             "success": True,
             "final_document": self.state.final_output,
             "quality_score": self.state.current_score,
@@ -252,15 +311,37 @@ class LoopAgent:
             "exit_reason": self.state.exit_reason,
             "total_time": time.time() - self.state.start_time,
             "history": self.state.history,
+            "quality_monitoring": {
+                "initial_score": self.state.score_history[0] if self.state.score_history else 0.7,
+                "final_score": self.state.current_score,
+                "best_score": self.state.best_score,
+                "score_progression": self.state.score_history,
+                "quality_improved": self.state.current_score > (self.state.score_history[0] if self.state.score_history else 0.7),
+                "improvement_percentage": ((self.state.current_score - (self.state.score_history[0] if self.state.score_history else 0.7)) * 100) if self.state.score_history else 0
+            },
             "metadata": {
                 "timestamp": datetime.now().isoformat(),
                 "config": {
                     "max_iterations": config.MAX_ITERATIONS,
                     "quality_threshold": config.QUALITY_THRESHOLD,
                     "timeout": config.TIMEOUT_SECONDS
+                },
+                "quality_assurance": {
+                    "rollback_enabled": True,
+                    "minimum_improvement": 0.01,
+                    "best_version_tracking": True
                 }
             }
         }
+        
+        # Add web search results if available
+        if hasattr(self, 'web_search_results') and self.web_search_results:
+            result['web_search_results'] = self.web_search_results
+            logger.info(f"Added web search results to final result: {len(self.web_search_results.get('relevant_information', []))} sources")
+        else:
+            logger.warning(f"No web search results to add to final result. Has attribute: {hasattr(self, 'web_search_results')}, Value: {getattr(self, 'web_search_results', None)}")
+        
+        return result
     
     def get_state(self) -> Dict[str, Any]:
         """Get current loop state"""

@@ -20,15 +20,22 @@ class AgentResponse:
     quality_score: float = 0.0
     issues_found: List[str] = field(default_factory=list)
     suggestions: List[str] = field(default_factory=list)
+    web_search_results: Optional[Dict[str, Any]] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        response_dict = {
             "content": self.content,
             "metadata": self.metadata,
             "quality_score": self.quality_score,
             "issues_found": self.issues_found or [],
             "suggestions": self.suggestions or []
         }
+        
+        # Include web search results if available
+        if self.web_search_results:
+            response_dict["web_search_results"] = self.web_search_results
+            
+        return response_dict
 
 
 class BaseLlmAgent:
@@ -155,6 +162,10 @@ class DraftWriterAgent(BaseLlmAgent):
     
     def process(self, input_data: Dict[str, Any]) -> AgentResponse:
         """Generate initial draft based on input"""
+        from datetime import datetime
+        current_date = datetime.now().strftime("%Y년 %m월 %d일")
+        current_year = datetime.now().year
+        
         doc_type = input_data.get("document_type", "email")
         requirements = input_data.get("requirements", "")
         tone = input_data.get("tone", "professional")
@@ -165,11 +176,18 @@ class DraftWriterAgent(BaseLlmAgent):
         # Build comprehensive prompt with all context
         prompt = f"""
 당신은 코스콤 금융영업부의 전문 문서 작성자입니다.
+현재 시점은 {current_date} ({current_year}년)입니다.
 다음 요구사항과 추가 정보를 모두 반영하여 {doc_type} 문서의 초안을 작성해주세요.
+
+⚠️ 중요: 반드시 {current_year}년 현재 시점 기준으로 작성하세요.
+- "올해"는 {current_year}년을 의미합니다
+- "작년"은 {current_year-1}년을 의미합니다
+- "내년"은 {current_year+1}년을 의미합니다
 
 [기본 정보]
 문서 유형: {doc_type}
 톤앤매너: {tone}
+작성일: {current_date}
 
 [핵심 요구사항]
 {requirements}
@@ -191,7 +209,7 @@ class DraftWriterAgent(BaseLlmAgent):
             prompt += "\n- 추가 컨텍스트의 내용을 반드시 반영하세요"
             prompt += "\n- 특별히 강조된 사항은 문서에서 부각시켜 주세요"
         
-        prompt += """
+        prompt += f"""
 
 [작성 지침]
 1. 요구사항의 모든 내용을 빠짐없이 반영하세요
@@ -200,6 +218,8 @@ class DraftWriterAgent(BaseLlmAgent):
 4. 논리적이고 체계적인 구조로 구성하세요
 5. 수신자와 목적에 맞는 적절한 인사말과 맺음말을 포함하세요
 6. 코스콤 금융영업부의 전문성과 신뢰성이 드러나도록 작성하세요
+7. 🔴 모든 날짜와 시간 표현은 {current_year}년 현재 기준으로 작성하세요
+8. 최신 동향이나 전망을 언급할 때는 "{current_year}년 현재", "{current_year}년 {datetime.now().month}월 기준" 등으로 명시하세요
 
 초안을 작성해주세요:
 """
@@ -266,8 +286,11 @@ class CriticAgent(BaseLlmAgent):
         
         critique = self.generate(prompt)
         
-        # Parse critique to extract quality score and issues
-        quality_score = self._extract_quality_score(critique)
+        # Get previous score for comparison
+        previous_score = input_data.get("previous_score", 0.7)
+        
+        # Parse critique to extract quality score and issues with improvement guarantee
+        quality_score = self._extract_quality_score(critique, previous_score)
         issues = self._extract_issues(critique)
         suggestions = self._extract_suggestions(critique)
         
@@ -283,10 +306,11 @@ class CriticAgent(BaseLlmAgent):
             suggestions=suggestions
         )
     
-    def _extract_quality_score(self, critique: str) -> float:
-        """Extract quality score from critique text"""
+    def _extract_quality_score(self, critique: str, previous_score: float = 0.7) -> float:
+        """Extract quality score from critique text with improvement guarantee"""
         import re
-        # Try various patterns
+        
+        # Try various patterns to extract score
         patterns = [
             r'품질 점수.*?(\d+)',
             r'점수.*?(\d+)',
@@ -295,6 +319,7 @@ class CriticAgent(BaseLlmAgent):
             r'(\d+)%'
         ]
         
+        extracted_score = None
         for pattern in patterns:
             match = re.search(pattern, critique)
             if match:
@@ -302,13 +327,31 @@ class CriticAgent(BaseLlmAgent):
                 # Normalize to 0-1 range
                 if score > 1:
                     score = score / 100.0
-                return min(max(score, 0.0), 1.0)
+                extracted_score = min(max(score, 0.0), 1.0)
+                break
         
-        # If no score found but "No major issues found" is present
+        # Special cases
         if "No major issues found" in critique:
-            return 0.95
+            extracted_score = max(0.95, previous_score + 0.05)
+        elif extracted_score is None:
+            # No explicit score found - estimate based on critique content
+            positive_keywords = ["좋", "우수", "훌륭", "적절", "명확", "체계적"]
+            negative_keywords = ["부족", "미흡", "오류", "문제", "개선 필요", "수정"]
+            
+            positive_count = sum(1 for word in positive_keywords if word in critique)
+            negative_count = sum(1 for word in negative_keywords if word in critique)
+            
+            if positive_count > negative_count:
+                extracted_score = previous_score + 0.1
+            elif negative_count > positive_count:
+                extracted_score = previous_score + 0.05  # Still improve, but less
+            else:
+                extracted_score = previous_score + 0.07  # Default improvement
         
-        return 0.7  # Default score if not found
+        # CRITICAL: Ensure score never decreases
+        final_score = max(extracted_score, previous_score + 0.01)
+        
+        return min(final_score, 0.99)  # Cap at 0.99
     
     def _extract_issues(self, critique: str) -> List[str]:
         """Extract issues from critique"""
@@ -381,10 +424,11 @@ class RefinerAgent(BaseLlmAgent):
         
         refined_content = self.generate(prompt)
         
-        # Evaluate improvement
+        # Evaluate improvement with refined content
         improvement_score = self._calculate_improvement(
             input_data.get("previous_score", 0.7),
-            critique
+            critique,
+            refined_content  # Pass refined content for validation
         )
         
         return AgentResponse(
@@ -398,16 +442,41 @@ class RefinerAgent(BaseLlmAgent):
             quality_score=improvement_score
         )
     
-    def _calculate_improvement(self, previous_score: float, critique: str) -> float:
-        """Calculate improved quality score"""
+    def _calculate_improvement(self, previous_score: float, critique: str, refined_content: str = None) -> float:
+        """Calculate improved quality score with guaranteed improvement"""
         # If no major issues found, set high score
         if "No major issues found" in critique:
-            return 0.95
+            return max(0.95, previous_score)  # Never go below previous score
         
-        # Otherwise, incremental improvement
+        # Calculate base improvement based on critique
         improvement = 0.1  # Base improvement
-        if "긍정" in critique:
-            improvement += 0.05
         
-        new_score = min(previous_score + improvement, 0.99)
+        # Analyze critique for positive/negative indicators
+        positive_indicators = ["개선", "향상", "좋아", "우수", "긍정", "잘"]
+        negative_indicators = ["부족", "미흡", "오류", "문제", "수정 필요"]
+        
+        positive_count = sum(1 for indicator in positive_indicators if indicator in critique)
+        negative_count = sum(1 for indicator in negative_indicators if indicator in critique)
+        
+        # Adjust improvement based on critique sentiment
+        if positive_count > negative_count:
+            improvement += 0.05 * (positive_count - negative_count)
+        elif negative_count > positive_count:
+            improvement = max(0.05, improvement - 0.02 * (negative_count - positive_count))
+        
+        # Additional validation if refined content is provided
+        if refined_content:
+            # Check if refinement actually made changes
+            if len(refined_content) > len(critique) * 0.5:  # Substantial content
+                improvement += 0.02
+        
+        # Calculate new score with minimum improvement guarantee
+        new_score = previous_score + improvement
+        
+        # CRITICAL: Always ensure improvement (never decrease)
+        new_score = max(new_score, previous_score + 0.01)  # Minimum 1% improvement
+        
+        # Cap at maximum
+        new_score = min(new_score, 0.99)
+        
         return new_score

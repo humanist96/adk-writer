@@ -20,7 +20,10 @@
       "WebSearch",
       "WebFetch(domain:share.streamlit.io)",
       "WebFetch(domain:adk-writer.streamlit.app)",
-      "Bash(gh repo view:*)"
+      "Bash(gh repo view:*)",
+      "Bash(ping:*)",
+      "Bash(grep:*)",
+      "Bash(del test_web_search_fix.py test_web_search_result.json)"
     ],
     "deny": [],
     "ask": []

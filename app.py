@@ -16,6 +16,9 @@ try:
 except:
     from src.config import config
 
+# Import LoopAgent (always needed)
+from src.agents.loop_agent import LoopAgent
+
 # Check if multi-model support is available
 try:
     from src.agents.multi_model_agents import (
@@ -26,7 +29,6 @@ try:
     MULTI_MODEL_SUPPORT = True
 except ImportError:
     MULTI_MODEL_SUPPORT = False
-    from src.agents.loop_agent import LoopAgent
 
 from src.tools.custom_tools import (
     validate_financial_terms,
@@ -111,7 +113,8 @@ class FinancialWritingApp:
         """Initialize the LoopAgent"""
         try:
             config.validate()
-            self.loop_agent = LoopAgent(config.get_agent_config())
+            self.agent_config = config.get_agent_config()
+            self.loop_agent = LoopAgent(self.agent_config)
         except Exception as e:
             st.error(f"초기화 실패: {str(e)}")
             st.stop()
@@ -179,6 +182,18 @@ class FinancialWritingApp:
             return {"error": "Agent not initialized"}
         
         try:
+            # Update agent config with web search settings if provided
+            if input_data.get("enable_web_search"):
+                # Create a new config with web search settings
+                enhanced_config = self.agent_config.copy()
+                enhanced_config["enable_web_search"] = True
+                enhanced_config["search_provider"] = input_data.get("search_provider", "fallback")
+                enhanced_config["search_api_key"] = input_data.get("search_api_key")
+                enhanced_config["google_search_engine_id"] = input_data.get("google_search_engine_id")
+                
+                # Reinitialize the loop agent with enhanced config
+                self.loop_agent = LoopAgent(enhanced_config)
+            
             # Show progress
             progress_bar = st.progress(0)
             status_text = st.empty()
@@ -286,6 +301,59 @@ class FinancialWritingApp:
             
             st.divider()
             
+            # Web Search Settings
+            with st.expander("🔍 웹 검색 설정"):
+                enable_web_search = st.checkbox(
+                    "웹 검색 활성화",
+                    value=False,
+                    help="문서 제목을 기반으로 웹 검색을 수행하여 최신 정보를 문서에 반영합니다."
+                )
+                
+                if enable_web_search:
+                    search_depth = st.select_slider(
+                        "검색 깊이",
+                        options=["quick", "standard", "deep"],
+                        value="standard",
+                        format_func=lambda x: {
+                            "quick": "빠른 검색 (1-2개 결과)",
+                            "standard": "표준 검색 (3-5개 결과)", 
+                            "deep": "심층 검색 (5-10개 결과)"
+                        }.get(x, x)
+                    )
+                    
+                    extract_content = st.checkbox(
+                        "웹 페이지 내용 추출",
+                        value=True,
+                        help="검색된 웹 페이지에서 전체 내용을 추출하여 더 풍부한 정보를 제공합니다."
+                    )
+                    
+                    search_provider = st.selectbox(
+                        "검색 엔진",
+                        options=["fallback", "google", "bing"],
+                        format_func=lambda x: {
+                            "fallback": "기본 검색 (API 키 불필요)",
+                            "google": "Google 검색 (API 키 필요)",
+                            "bing": "Bing 검색 (API 키 필요)"
+                        }.get(x, x)
+                    )
+                    
+                    if search_provider in ["google", "bing"]:
+                        search_api_key = st.text_input(
+                            f"{search_provider.title()} API 키",
+                            type="password",
+                            help=f"{search_provider.title()} Search API 키를 입력하세요."
+                        )
+                        
+                        if search_provider == "google":
+                            search_engine_id = st.text_input(
+                                "Google Search Engine ID",
+                                help="Google Custom Search Engine ID를 입력하세요."
+                            )
+                    
+                    st.info("💡 웹 검색을 사용하면 최신 시장 동향, 통계, 관련 뉴스 등을 자동으로 수집하여 문서 품질을 향상시킵니다.")
+            
+            st.divider()
+            
             if st.button("🔄 초기화"):
                 st.session_state.history = []
                 st.session_state.current_result = None
@@ -324,6 +392,27 @@ class FinancialWritingApp:
                             "quality_threshold": quality_threshold,
                             "max_iterations": max_iterations
                         }
+                        
+                        # Add web search configuration if enabled
+                        if 'enable_web_search' in locals() and enable_web_search:
+                            input_data["enable_web_search"] = True
+                            
+                            # Map search depth to max_results
+                            max_results_map = {"quick": 2, "standard": 5, "deep": 10}
+                            search_config = {
+                                "max_results": max_results_map.get(search_depth, 5),
+                                "search_depth": search_depth,
+                                "extract_content": extract_content
+                            }
+                            input_data["search_config"] = search_config
+                            
+                            # Add search provider configuration
+                            if search_provider != "fallback":
+                                input_data["search_provider"] = search_provider
+                                if 'search_api_key' in locals() and search_api_key:
+                                    input_data["search_api_key"] = search_api_key
+                                if search_provider == "google" and 'search_engine_id' in locals():
+                                    input_data["google_search_engine_id"] = search_engine_id
                         
                         with st.spinner("AI가 문서를 작성 중입니다..."):
                             result = self.process_document(input_data)
