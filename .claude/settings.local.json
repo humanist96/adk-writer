@@ -23,7 +23,9 @@
       "Bash(gh repo view:*)",
       "Bash(ping:*)",
       "Bash(grep:*)",
-      "Bash(del test_web_search_fix.py test_web_search_result.json)"
+      "Bash(del test_web_search_fix.py test_web_search_result.json)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:write-multi-agent.streamlit.app)"
     ],
     "deny": [],
     "ask": []
